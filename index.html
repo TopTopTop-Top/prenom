@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Prénom Party Game</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="hero">
+        <p class="badge">INSEE Party Edition</p>
+        <h1>Prénom Clash</h1>
+        <p class="subtitle">
+          Défie tes amis sur les prénoms français, en local sur un même portable
+        </p>
+      </header>
+
+      <section class="card glass">
+        <h2>Paramètres</h2>
+        <div class="row">
+          <label for="players">Joueurs (séparés par virgule)</label>
+          <input id="players" value="Alice,Bob,Charlie" />
+        </div>
+        <div class="row">
+          <label for="targetScore">Score pour gagner</label>
+          <input id="targetScore" type="number" value="15" min="5" max="100" />
+        </div>
+        <div class="row">
+          <label for="difficulty">Niveau (années / périodes)</label>
+          <select id="difficulty">
+            <option value="normal" selected>Normal</option>
+            <option value="easy">Facile — grandes différences</option>
+            <option value="hard">Difficile — années très proches</option>
+            <option value="mixed">Mixte — varie à chaque manche</option>
+          </select>
+        </div>
+        <button id="startBtn" class="btn-primary">Lancer la partie</button>
+      </section>
+
+      <section id="gameSection" class="card game-card hidden">
+        <div class="topbar">
+          <h2 id="roundTitle"></h2>
+          <span id="turnPill" class="turn-pill"></span>
+        </div>
+        <div class="progress-wrap">
+          <div id="progressBar" class="progress-bar"></div>
+        </div>
+        <p id="roundDescription" class="round-prompt"></p>
+        <div id="answerArea" class="answer-grid"></div>
+        <p id="feedback" class="feedback"></p>
+        <button id="nextRoundBtn" class="btn-secondary">Manche suivante</button>
+      </section>
+
+      <section class="card glass">
+        <h2>Scores</h2>
+        <ul id="scoreBoard"></ul>
+      </section>
+    </main>
+    <script type="module" src="./src/app.js"></script>
+  </body>
+</html>

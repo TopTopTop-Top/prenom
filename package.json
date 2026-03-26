@@ -1,0 +1,10 @@
+{
+  "name": "prenom-party-game",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:data": "node scripts/build-game-data.mjs",
+    "start": "python3 -m http.server 8080"
+  }
+}

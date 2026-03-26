@@ -1,0 +1,682 @@
+const dataUrl = "./data/game-data.json";
+
+const state = {
+  players: [],
+  currentPlayerIndex: 0,
+  currentRound: 0,
+  targetScore: 15,
+  difficulty: "normal",
+  data: null,
+  currentChallenge: null,
+};
+
+const playersInput = document.getElementById("players");
+const targetScoreInput = document.getElementById("targetScore");
+const difficultyInput = document.getElementById("difficulty");
+const startBtn = document.getElementById("startBtn");
+const nextRoundBtn = document.getElementById("nextRoundBtn");
+const gameSection = document.getElementById("gameSection");
+const roundTitle = document.getElementById("roundTitle");
+const roundDescription = document.getElementById("roundDescription");
+const answerArea = document.getElementById("answerArea");
+const feedback = document.getElementById("feedback");
+const scoreBoard = document.getElementById("scoreBoard");
+const progressBar = document.getElementById("progressBar");
+const turnPill = document.getElementById("turnPill");
+
+let audioContext = null;
+
+function initAudio() {
+  if (!audioContext) {
+    audioContext = new window.AudioContext();
+  }
+}
+
+function playTone({
+  frequency = 440,
+  duration = 0.12,
+  type = "sine",
+  volume = 0.03,
+}) {
+  if (!audioContext) return;
+  const osc = audioContext.createOscillator();
+  const gain = audioContext.createGain();
+  osc.type = type;
+  osc.frequency.value = frequency;
+  gain.gain.value = volume;
+  osc.connect(gain);
+  gain.connect(audioContext.destination);
+  const now = audioContext.currentTime;
+  osc.start(now);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+  osc.stop(now + duration);
+}
+
+function playGoodSound() {
+  playTone({ frequency: 620, duration: 0.1, type: "triangle", volume: 0.03 });
+  setTimeout(
+    () =>
+      playTone({
+        frequency: 920,
+        duration: 0.12,
+        type: "triangle",
+        volume: 0.03,
+      }),
+    100
+  );
+}
+
+function playBadSound() {
+  playTone({ frequency: 280, duration: 0.12, type: "sawtooth", volume: 0.03 });
+}
+
+function playClickSound() {
+  playTone({ frequency: 420, duration: 0.05, type: "square", volume: 0.015 });
+}
+
+function randomInt(max) {
+  return Math.floor(Math.random() * max);
+}
+
+function pickRandom(array) {
+  return array[randomInt(array.length)];
+}
+
+function pickTwoDistinct(array) {
+  const a = pickRandom(array);
+  let b = pickRandom(array);
+  while (b.prenom === a.prenom) {
+    b = pickRandom(array);
+  }
+  return [a, b];
+}
+
+function resolveDifficulty() {
+  if (state.difficulty === "mixed") {
+    return pickRandom(["easy", "normal", "hard"]);
+  }
+  return state.difficulty;
+}
+
+/** Fenêtres pour le duel : plus courtes en difficile, plus longues en facile. */
+function yearWindow(resolvedDifficulty) {
+  const d = resolvedDifficulty ?? resolveDifficulty();
+  const wide = [
+    [1900, 1950],
+    [1951, 1980],
+    [1981, 2000],
+    [2011, 2024],
+  ];
+  const narrow = [
+    [2018, 2024],
+    [2015, 2019],
+    [2010, 2014],
+    [2005, 2009],
+    [2000, 2004],
+    [1995, 1999],
+  ];
+  const all = [
+    [1900, 1950],
+    [1951, 1980],
+    [1981, 2000],
+    [2001, 2010],
+    [2011, 2024],
+  ];
+  if (d === "easy") {
+    return pickRandom(wide);
+  }
+  if (d === "hard") {
+    return pickRandom(narrow);
+  }
+  return pickRandom(all);
+}
+
+/**
+ * 4 années dont le pic — écart des propositions selon le niveau.
+ */
+function pickPeakYearChoices(peakYear, resolvedDifficulty) {
+  const d = resolvedDifficulty ?? resolveDifficulty();
+  const choices = new Set([peakYear]);
+  const minGapOther = d === "easy" ? 20 : d === "hard" ? 0 : 10;
+  let safety = 0;
+  while (choices.size < 4 && safety < 600) {
+    safety += 1;
+    let y;
+    if (d === "easy") {
+      const sign = randomInt(2) ? 1 : -1;
+      y = peakYear + sign * (20 + randomInt(75));
+    } else if (d === "hard") {
+      y = peakYear + randomInt(11) - 5;
+    } else {
+      y = peakYear + randomInt(35) - 17;
+    }
+    if (y < 1900 || y > 2024 || y === peakYear) {
+      continue;
+    }
+    if (minGapOther > 0 && Math.abs(y - peakYear) < minGapOther) {
+      continue;
+    }
+    choices.add(y);
+  }
+  while (choices.size < 4) {
+    const y = 1900 + randomInt(125);
+    if (y !== peakYear) {
+      choices.add(y);
+    }
+  }
+  return [...choices].sort(() => Math.random() - 0.5);
+}
+
+function sumRange(yearly, start, end) {
+  let sum = 0;
+  for (let y = start; y <= end; y += 1) {
+    sum += yearly[String(y)] || 0;
+  }
+  return sum;
+}
+
+function getGenderTagFromSexTotals(sexTotals) {
+  const m = sexTotals?.["1"] || 0;
+  const f = sexTotals?.["2"] || 0;
+  if (m > 0 && f > 0) return "♂️♀️";
+  if (m > 0) return "♂️";
+  if (f > 0) return "♀️";
+  return "❓";
+}
+
+function displayName(name, sexTotals) {
+  return `${name} ${getGenderTagFromSexTotals(sexTotals)}`;
+}
+
+/** Effectifs INSEE (déjà arrondis au multiple de 5 dans la source). */
+function formatCount(n) {
+  return new Intl.NumberFormat("fr-FR").format(n);
+}
+
+function formatNameStats(options) {
+  return [...options]
+    .sort((a, b) => b.value - a.value)
+    .map((o) => `${displayName(o.name, o.sexTotals)}: ${formatCount(o.value)}`)
+    .join(" | ");
+}
+
+function scoreFor(playerName, delta) {
+  const p = state.players.find((x) => x.name === playerName);
+  p.score += delta;
+}
+
+function renderScores() {
+  scoreBoard.innerHTML = "";
+  const sorted = [...state.players].sort((a, b) => b.score - a.score);
+  sorted.forEach((p, index) => {
+    const rank = index + 1;
+    const medal =
+      rank === 1 ? "👑" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : "•";
+    const li = document.createElement("li");
+    li.innerHTML = `<span>${medal} ${p.name}</span><strong>${p.score} pts</strong>`;
+    scoreBoard.appendChild(li);
+  });
+}
+
+function updateProgress() {
+  const best = Math.max(...state.players.map((p) => p.score), 0);
+  const pct = Math.min(100, Math.round((best / state.targetScore) * 100));
+  progressBar.style.width = `${pct}%`;
+}
+
+function checkWinner() {
+  const winner = state.players.find((p) => p.score >= state.targetScore);
+  if (!winner) return null;
+  return winner;
+}
+
+function clearChallengeUi() {
+  answerArea.innerHTML = "";
+  feedback.textContent = "";
+  feedback.className = "feedback";
+  answerArea.className = "answer-grid";
+}
+
+function setFeedback(text, kind = "ok") {
+  feedback.textContent = text;
+  feedback.className = `feedback ${kind}`;
+}
+
+function createAnswerButton(label, onClick) {
+  const btn = document.createElement("button");
+  btn.className = "answer-btn";
+  btn.textContent = label;
+  btn.onclick = onClick;
+  return btn;
+}
+
+function lockAnswers() {
+  const buttons = answerArea.querySelectorAll("button");
+  buttons.forEach((b) => {
+    b.disabled = true;
+  });
+}
+
+function askDuelPopularity(player) {
+  const [a, b] = pickTwoDistinct(state.data.names);
+  const duelDiff = resolveDifficulty();
+  const [start, end] = yearWindow(duelDiff);
+  const duelLabel =
+    duelDiff === "easy"
+      ? "facile"
+      : duelDiff === "hard"
+      ? "difficile"
+      : "normal";
+  const sumA = sumRange(a.yearly, start, end);
+  const sumB = sumRange(b.yearly, start, end);
+
+  if (sumA === sumB) {
+    return askDuelPopularity(player);
+  }
+
+  const winner = sumA > sumB ? a.prenom : b.prenom;
+  const winEntry = sumA > sumB ? a : b;
+  roundDescription.textContent = `${player.name}, lequel a été le plus donné entre ${start} et ${end} ? (manche ${duelLabel})`;
+
+  [
+    { label: displayName(a.prenom, a.sexTotals), value: a.prenom },
+    { label: displayName(b.prenom, b.sexTotals), value: b.prenom },
+  ].forEach((opt) => {
+    const btn = createAnswerButton(opt.label, () => {
+      lockAnswers();
+      if (opt.value === winner) {
+        scoreFor(player.name, 2);
+        btn.classList.add("correct");
+        playGoodSound();
+        setFeedback(
+          `Bien joue ! +2 pts. ${displayName(
+            a.prenom,
+            a.sexTotals
+          )} ${formatCount(sumA)} — ${displayName(
+            b.prenom,
+            b.sexTotals
+          )} ${formatCount(sumB)} (${start}-${end}, France).`,
+          "ok"
+        );
+      } else {
+        btn.classList.add("wrong");
+        playBadSound();
+        setFeedback(
+          `Rate. Gagnant : ${displayName(
+            winEntry.prenom,
+            winEntry.sexTotals
+          )}. ${displayName(a.prenom, a.sexTotals)} ${formatCount(
+            sumA
+          )} — ${displayName(b.prenom, b.sexTotals)} ${formatCount(
+            sumB
+          )} (${start}-${end}).`,
+          "bad"
+        );
+        answerArea.querySelectorAll("button").forEach((b) => {
+          if (b.textContent.startsWith(`${winner} `))
+            b.classList.add("correct");
+        });
+      }
+      renderScores();
+      updateProgress();
+      state.currentChallenge = null;
+    });
+    answerArea.appendChild(btn);
+  });
+}
+
+function askPeakYear(player) {
+  const n = pickRandom(state.data.names);
+  const roundDiff = resolveDifficulty();
+  const choices = pickPeakYearChoices(n.peak.year, roundDiff);
+  const choiceStats = choices
+    .map((y) => ({ year: y, value: n.yearly[String(y)] || 0 }))
+    .sort((a, b) => b.value - a.value);
+  const statsText = choiceStats
+    .map((s) => `${s.year}: ${formatCount(s.value)}`)
+    .join(" | ");
+  const diffLabel =
+    roundDiff === "easy"
+      ? "facile"
+      : roundDiff === "hard"
+      ? "difficile"
+      : "normal";
+  roundDescription.textContent = `${player.name}, en quelle année ${displayName(
+    n.prenom,
+    n.sexTotals
+  )} a atteint son pic ? (manche ${diffLabel})`;
+
+  choices.forEach((year) => {
+    const btn = createAnswerButton(String(year), () => {
+      lockAnswers();
+      if (year === n.peak.year) {
+        scoreFor(player.name, 3);
+        btn.classList.add("correct");
+        playGoodSound();
+        setFeedback(
+          `Exact ! +3 pts. Pic en ${n.peak.year} : ${formatCount(
+            n.peak.value
+          )} naissances cette année-là (France). Comparatif des propositions : ${statsText}.`,
+          "ok"
+        );
+      } else if (Math.abs(year - n.peak.year) <= 1) {
+        scoreFor(player.name, 1);
+        btn.classList.add("correct");
+        playTone({
+          frequency: 680,
+          duration: 0.08,
+          type: "triangle",
+          volume: 0.02,
+        });
+        setFeedback(
+          `Presque (+1). Pic en ${n.peak.year} : ${formatCount(
+            n.peak.value
+          )} naissances. Comparatif des propositions : ${statsText}.`,
+          "ok"
+        );
+      } else {
+        btn.classList.add("wrong");
+        playBadSound();
+        setFeedback(
+          `Pic en ${n.peak.year} : ${formatCount(
+            n.peak.value
+          )} naissances cette année-là. Comparatif des propositions : ${statsText}.`,
+          "bad"
+        );
+        answerArea.querySelectorAll("button").forEach((b) => {
+          if (Number.parseInt(b.textContent, 10) === n.peak.year)
+            b.classList.add("correct");
+        });
+      }
+      renderScores();
+      updateProgress();
+      state.currentChallenge = null;
+    });
+    answerArea.appendChild(btn);
+  });
+}
+
+function askYoungAdultOldVote() {
+  const n = pickRandom(state.data.names);
+  roundDescription.textContent = `Vote collectif sur ${displayName(
+    n.prenom,
+    n.sexTotals
+  )} : ce prénom fait plutôt jeune enfant, adulte ou personne âgée ?`;
+
+  const categories = ["Jeune enfant", "Adulte", "Personne âgée"];
+  const votes = new Map();
+  state.players.forEach((p) => votes.set(p.name, null));
+  let pendingPlayerIndex = 0;
+  answerArea.className = "answer-grid vote-mode";
+
+  function renderVotingForCurrentPlayer() {
+    answerArea.innerHTML = "";
+    const current = state.players[pendingPlayerIndex];
+    setFeedback(`Vote de ${current.name}`, "ok");
+
+    categories.forEach((cat) => {
+      const btn = createAnswerButton(cat, () => {
+        playClickSound();
+        votes.set(current.name, cat);
+        pendingPlayerIndex += 1;
+        if (pendingPlayerIndex < state.players.length) {
+          renderVotingForCurrentPlayer();
+          return;
+        }
+
+        const counts = {};
+        for (const value of votes.values()) {
+          counts[value] = (counts[value] || 0) + 1;
+        }
+        const majorityCount = Math.max(...Object.values(counts));
+        const majorityCategories = Object.entries(counts)
+          .filter(([, c]) => c === majorityCount)
+          .map(([c]) => c);
+
+        const winners = state.players.filter((p) =>
+          majorityCategories.includes(votes.get(p.name))
+        );
+        winners.forEach((p) => scoreFor(p.name, 1));
+
+        const details = state.players
+          .map((p) => `${p.name}: ${votes.get(p.name)}`)
+          .join(" | ");
+        const voteStats = categories
+          .map((cat) => `${cat}: ${counts[cat] || 0}`)
+          .join(" | ");
+        playGoodSound();
+        const recent = n.recent2015_2024 ?? 0;
+        const old = n.old1900_1980 ?? 0;
+        const total = n.total ?? 0;
+        setFeedback(
+          `Majorite: ${majorityCategories.join(
+            " / "
+          )}. +1 pour la majorite. ${details} — Contexte INSEE : ${formatCount(
+            recent
+          )} naissances en 2015-2024, ${formatCount(
+            old
+          )} en 1900-1980, ${formatCount(
+            total
+          )} au total (France). Propositions du vote : ${voteStats}.`,
+          "ok"
+        );
+        renderScores();
+        updateProgress();
+        state.currentChallenge = null;
+      });
+      answerArea.appendChild(btn);
+    });
+  }
+
+  renderVotingForCurrentPlayer();
+}
+
+function askRegionChallenge(player) {
+  const region = pickRandom(state.data.regions);
+  const top = region.topNames.slice(0, 8);
+  const answer = top[0];
+  const options = [answer];
+  while (options.length < 4) {
+    const candidate = pickRandom(top);
+    if (!options.some((opt) => opt.name === candidate.name)) {
+      options.push(candidate);
+    }
+  }
+  options.sort(() => Math.random() - 0.5);
+  const optionsStats = formatNameStats(options);
+
+  roundDescription.textContent = `${player.name}, quel prénom est le plus donné dans la région ${region.name} ?`;
+
+  options.forEach((option) => {
+    const btn = createAnswerButton(
+      displayName(option.name, option.sexTotals),
+      () => {
+        lockAnswers();
+        if (option.name === answer.name) {
+          scoreFor(player.name, 2);
+          btn.classList.add("correct");
+          playGoodSound();
+          setFeedback(
+            `Correct ! +2 pts. ${displayName(
+              answer.name,
+              answer.sexTotals
+            )} : ${formatCount(answer.value)} naissances cumulées (${
+              region.name
+            }). Toutes les propositions : ${optionsStats}.`,
+            "ok"
+          );
+        } else {
+          btn.classList.add("wrong");
+          playBadSound();
+          setFeedback(
+            `Non. C'était ${displayName(
+              answer.name,
+              answer.sexTotals
+            )} (${formatCount(answer.value)}). Tu avais choisi ${displayName(
+              option.name,
+              option.sexTotals
+            )} (${formatCount(
+              option.value
+            )}). Toutes les propositions : ${optionsStats}.`,
+            "bad"
+          );
+          answerArea.querySelectorAll("button").forEach((b) => {
+            if (b.textContent.startsWith(`${answer.name} `))
+              b.classList.add("correct");
+          });
+        }
+        renderScores();
+        updateProgress();
+        state.currentChallenge = null;
+      }
+    );
+    answerArea.appendChild(btn);
+  });
+}
+
+function askDepartmentChallenge(player) {
+  const dpt = pickRandom(state.data.departments);
+  const top = dpt.topNames.slice(0, 8);
+  const answer = top[0];
+  const options = [answer];
+  while (options.length < 4) {
+    const candidate = pickRandom(top);
+    if (!options.some((opt) => opt.name === candidate.name)) {
+      options.push(candidate);
+    }
+  }
+  options.sort(() => Math.random() - 0.5);
+  const optionsStats = formatNameStats(options);
+
+  roundDescription.textContent = `${player.name}, quel prénom domine dans le département ${dpt.name} (${dpt.code}) ?`;
+
+  options.forEach((option) => {
+    const btn = createAnswerButton(
+      displayName(option.name, option.sexTotals),
+      () => {
+        lockAnswers();
+        if (option.name === answer.name) {
+          scoreFor(player.name, 2);
+          btn.classList.add("correct");
+          playGoodSound();
+          setFeedback(
+            `Correct ! +2 pts. ${displayName(
+              answer.name,
+              answer.sexTotals
+            )} : ${formatCount(answer.value)} naissances cumulées (${
+              dpt.name
+            }). Toutes les propositions : ${optionsStats}.`,
+            "ok"
+          );
+        } else {
+          btn.classList.add("wrong");
+          playBadSound();
+          setFeedback(
+            `Rate. C'était ${displayName(
+              answer.name,
+              answer.sexTotals
+            )} (${formatCount(answer.value)}). Choix : ${displayName(
+              option.name,
+              option.sexTotals
+            )} (${formatCount(
+              option.value
+            )}). Toutes les propositions : ${optionsStats}.`,
+            "bad"
+          );
+          answerArea.querySelectorAll("button").forEach((b) => {
+            if (b.textContent.startsWith(`${answer.name} `))
+              b.classList.add("correct");
+          });
+        }
+        renderScores();
+        updateProgress();
+        state.currentChallenge = null;
+      }
+    );
+    answerArea.appendChild(btn);
+  });
+}
+
+function nextRound() {
+  if (state.currentChallenge) {
+    return;
+  }
+  clearChallengeUi();
+  state.currentRound += 1;
+  const player = state.players[state.currentPlayerIndex];
+  roundTitle.textContent = `Manche ${state.currentRound} - Tour de ${player.name}`;
+  turnPill.textContent = `Objectif ${state.targetScore} pts`;
+  playClickSound();
+
+  const challengeFns = [
+    () => askDuelPopularity(player),
+    () => askPeakYear(player),
+    () => askYoungAdultOldVote(),
+    () => askRegionChallenge(player),
+    () => askDepartmentChallenge(player),
+  ];
+
+  state.currentChallenge = pickRandom(challengeFns);
+  state.currentChallenge();
+
+  const winner = checkWinner();
+  if (winner) {
+    playGoodSound();
+    setFeedback(
+      `${winner.name} gagne la partie avec ${winner.score} points !`,
+      "ok"
+    );
+    state.currentChallenge = null;
+    nextRoundBtn.disabled = true;
+    return;
+  }
+
+  state.currentPlayerIndex =
+    (state.currentPlayerIndex + 1) % state.players.length;
+}
+
+async function loadData() {
+  const response = await fetch(dataUrl);
+  if (!response.ok) {
+    throw new Error(
+      "Impossible de charger data/game-data.json. Lance d'abord npm run build:data"
+    );
+  }
+  return response.json();
+}
+
+startBtn.onclick = async () => {
+  initAudio();
+  const names = playersInput.value
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean);
+
+  if (names.length < 2) {
+    alert("Il faut au moins 2 joueurs.");
+    return;
+  }
+
+  state.targetScore = Number.parseInt(targetScoreInput.value, 10) || 15;
+  state.difficulty = difficultyInput?.value || "normal";
+  state.players = names.map((name) => ({ name, score: 0 }));
+  state.currentPlayerIndex = 0;
+  state.currentRound = 0;
+  nextRoundBtn.disabled = false;
+
+  try {
+    state.data = await loadData();
+  } catch (error) {
+    alert(error.message);
+    return;
+  }
+
+  renderScores();
+  updateProgress();
+  gameSection.classList.remove("hidden");
+  nextRound();
+};
+
+nextRoundBtn.onclick = () => {
+  nextRound();
+};
