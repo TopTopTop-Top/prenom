@@ -312,12 +312,21 @@ function rangeSum(yearly, start, end) {
 }
 
 async function main() {
-  if (
-    !fs.existsSync(natCsvPath) ||
-    !fs.existsSync(regCsvPath) ||
-    !fs.existsSync(dptCsvPath)
-  ) {
-    throw new Error("Un ou plusieurs fichiers CSV introuvables.");
+  const hasNat = fs.existsSync(natCsvPath);
+  const hasReg = fs.existsSync(regCsvPath);
+  const hasDpt = fs.existsSync(dptCsvPath);
+
+  if (!hasNat || !hasReg || !hasDpt) {
+    // In cloud deploys (Render static), local CSV paths do not exist.
+    // If prebuilt data is already committed, keep it and let deploy continue.
+    if (fs.existsSync(outPath)) {
+      console.log("CSV introuvables dans cet environnement.");
+      console.log(`Réutilisation du fichier existant: ${outPath}`);
+      return;
+    }
+    throw new Error(
+      "Un ou plusieurs fichiers CSV introuvables et aucun data/game-data.json existant."
+    );
   }
 
   console.log("Parsing national CSV...");
