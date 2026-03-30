@@ -401,9 +401,9 @@ function askYoungAdultOldVote() {
   roundDescription.textContent = `Vote collectif sur ${displayName(
     n.prenom,
     n.sexTotals
-  )} : coche 1, 2 ou les 3 cases. +1 pt seulement si au moins 2 joueurs ont exactement la même combinaison.`;
+  )} : coche enfant, adulte et/ou personne âgée (1 à 3 cases). +1 pt seulement si au moins 2 joueurs ont exactement la même combinaison.`;
 
-  const categories = ["Jeune enfant", "Adulte", "Personne âgée"];
+  const categories = ["Enfant", "Adulte", "Personne âgée"];
   /** @type {Map<string, Set<string>>} */
   const votes = new Map();
   state.players.forEach((p) => votes.set(p.name, new Set()));
