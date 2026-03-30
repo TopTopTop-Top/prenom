@@ -401,7 +401,7 @@ function askYoungAdultOldVote() {
   roundDescription.textContent = `Vote collectif sur ${displayName(
     n.prenom,
     n.sexTotals
-  )} : coche 1, 2 ou les 3 cases (jeune enfant, adulte, personne âgée).`;
+  )} : coche 1, 2 ou les 3 cases. +1 pt seulement si au moins 2 joueurs ont exactement la même combinaison.`;
 
   const categories = ["Jeune enfant", "Adulte", "Personne âgée"];
   /** @type {Map<string, Set<string>>} */
@@ -455,6 +455,36 @@ function askYoungAdultOldVote() {
         return;
       }
 
+      function voteKey(set) {
+        return [...set].sort().join("||");
+      }
+
+      const comboCounts = new Map();
+      for (const p of state.players) {
+        const k = voteKey(votes.get(p.name));
+        comboCounts.set(k, (comboCounts.get(k) || 0) + 1);
+      }
+
+      const winners = state.players.filter(
+        (p) => comboCounts.get(voteKey(votes.get(p.name))) >= 2
+      );
+      winners.forEach((p) => scoreFor(p.name, 1));
+
+      const details = state.players
+        .map((p) => {
+          const arr = [...votes.get(p.name)].sort();
+          return `${p.name}: ${arr.join(" + ") || "—"}`;
+        })
+        .join(" | ");
+
+      const groupsText = [...comboCounts.entries()]
+        .filter(([, c]) => c >= 2)
+        .map(([key, c]) => {
+          const label = key.split("||").join(" + ") || "—";
+          return `"${label}" ×${c}`;
+        })
+        .join(" ; ");
+
       const categoryCounts = {};
       categories.forEach((c) => {
         categoryCounts[c] = 0;
@@ -464,43 +494,35 @@ function askYoungAdultOldVote() {
           categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;
         }
       }
-      const maxVotes = Math.max(...Object.values(categoryCounts));
-      const winningCategories = categories.filter(
-        (c) => categoryCounts[c] === maxVotes
-      );
-
-      const winners = state.players.filter((p) => {
-        const choice = votes.get(p.name);
-        for (const wc of winningCategories) {
-          if (choice.has(wc)) return true;
-        }
-        return false;
-      });
-      winners.forEach((p) => scoreFor(p.name, 1));
-
-      const details = state.players
-        .map((p) => {
-          const arr = [...votes.get(p.name)];
-          return `${p.name}: ${arr.join(" + ") || "—"}`;
-        })
-        .join(" | ");
       const voteStats = categories
         .map((cat) => `${cat}: ${categoryCounts[cat] ?? 0}`)
         .join(" | ");
-      playGoodSound();
+
+      if (winners.length > 0) {
+        playGoodSound();
+      } else {
+        playClickSound();
+      }
       const recent = n.recent2015_2024 ?? 0;
       const old = n.old1900_1980 ?? 0;
       const total = n.total ?? 0;
+      const pointsMsg =
+        winners.length > 0
+          ? `+1 pt pour : ${winners
+              .map((w) => w.name)
+              .join(", ")} (même combinaison à au moins 2).`
+          : "Aucun point : personne n'a la même combinaison qu'un autre.";
+      const groupsMsg =
+        groupsText ||
+        "Aucune combinaison en double (au moins 2 joueurs identiques requis).";
       setFeedback(
-        `Scores par case (nombre de joueurs qui l'ont cochée) : max = ${maxVotes} → ${winningCategories.join(
-          " / "
-        )}. +1 si tu as coché au moins une de ces cases gagnantes. ${details} — Contexte INSEE : ${formatCount(
+        `${pointsMsg} Groupes identiques : ${groupsMsg} — ${details} — Contexte INSEE : ${formatCount(
           recent
         )} naissances en 2015-2024, ${formatCount(
           old
         )} en 1900-1980, ${formatCount(
           total
-        )} au total (France). Détail des cases : ${voteStats}.`,
+        )} au total (France). Cases cochées (tous joueurs) : ${voteStats}.`,
         "ok"
       );
       renderScores();
