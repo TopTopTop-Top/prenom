@@ -247,6 +247,18 @@ button:hover {
   gap: 8px;
 }
 
+.answer-btn.vote-toggle.selected {
+  background: rgba(127, 140, 255, 0.35);
+  border-color: rgba(180, 190, 255, 0.75);
+  box-shadow: 0 0 0 2px rgba(127, 140, 255, 0.35);
+}
+
+.answer-btn.vote-confirm {
+  margin-top: 6px;
+  background: linear-gradient(135deg, rgba(127, 140, 255, 0.45), rgba(57, 216, 255, 0.35));
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
 .feedback {
   margin-top: 12px;
   font-weight: 700;

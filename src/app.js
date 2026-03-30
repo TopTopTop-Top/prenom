@@ -401,71 +401,113 @@ function askYoungAdultOldVote() {
   roundDescription.textContent = `Vote collectif sur ${displayName(
     n.prenom,
     n.sexTotals
-  )} : ce prénom fait plutôt jeune enfant, adulte ou personne âgée ?`;
+  )} : coche 1, 2 ou les 3 cases (jeune enfant, adulte, personne âgée).`;
 
   const categories = ["Jeune enfant", "Adulte", "Personne âgée"];
+  /** @type {Map<string, Set<string>>} */
   const votes = new Map();
-  state.players.forEach((p) => votes.set(p.name, null));
+  state.players.forEach((p) => votes.set(p.name, new Set()));
   let pendingPlayerIndex = 0;
   answerArea.className = "answer-grid vote-mode";
 
   function renderVotingForCurrentPlayer() {
     answerArea.innerHTML = "";
     const current = state.players[pendingPlayerIndex];
-    setFeedback(`Vote de ${current.name}`, "ok");
+    setFeedback(`Tour de ${current.name} — coche au moins une case`, "ok");
+
+    const selected = new Set(votes.get(current.name));
 
     categories.forEach((cat) => {
-      const btn = createAnswerButton(cat, () => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "answer-btn vote-toggle";
+      btn.textContent = cat;
+      if (selected.has(cat)) {
+        btn.classList.add("selected");
+      }
+      btn.onclick = () => {
         playClickSound();
-        votes.set(current.name, cat);
-        pendingPlayerIndex += 1;
-        if (pendingPlayerIndex < state.players.length) {
-          renderVotingForCurrentPlayer();
-          return;
+        if (selected.has(cat)) {
+          selected.delete(cat);
+          btn.classList.remove("selected");
+        } else {
+          selected.add(cat);
+          btn.classList.add("selected");
         }
-
-        const counts = {};
-        for (const value of votes.values()) {
-          counts[value] = (counts[value] || 0) + 1;
-        }
-        const majorityCount = Math.max(...Object.values(counts));
-        const majorityCategories = Object.entries(counts)
-          .filter(([, c]) => c === majorityCount)
-          .map(([c]) => c);
-
-        const winners = state.players.filter((p) =>
-          majorityCategories.includes(votes.get(p.name))
-        );
-        winners.forEach((p) => scoreFor(p.name, 1));
-
-        const details = state.players
-          .map((p) => `${p.name}: ${votes.get(p.name)}`)
-          .join(" | ");
-        const voteStats = categories
-          .map((cat) => `${cat}: ${counts[cat] || 0}`)
-          .join(" | ");
-        playGoodSound();
-        const recent = n.recent2015_2024 ?? 0;
-        const old = n.old1900_1980 ?? 0;
-        const total = n.total ?? 0;
-        setFeedback(
-          `Majorite: ${majorityCategories.join(
-            " / "
-          )}. +1 pour la majorite. ${details} — Contexte INSEE : ${formatCount(
-            recent
-          )} naissances en 2015-2024, ${formatCount(
-            old
-          )} en 1900-1980, ${formatCount(
-            total
-          )} au total (France). Propositions du vote : ${voteStats}.`,
-          "ok"
-        );
-        renderScores();
-        updateProgress();
-        state.currentChallenge = null;
-      });
+      };
       answerArea.appendChild(btn);
     });
+
+    const confirmBtn = document.createElement("button");
+    confirmBtn.type = "button";
+    confirmBtn.className = "answer-btn vote-confirm";
+    confirmBtn.textContent = "Valider mon vote";
+    confirmBtn.onclick = () => {
+      if (selected.size === 0) {
+        alert("Coche au moins une proposition.");
+        return;
+      }
+      playClickSound();
+      votes.set(current.name, new Set(selected));
+      pendingPlayerIndex += 1;
+      if (pendingPlayerIndex < state.players.length) {
+        renderVotingForCurrentPlayer();
+        return;
+      }
+
+      const categoryCounts = {};
+      categories.forEach((c) => {
+        categoryCounts[c] = 0;
+      });
+      for (const set of votes.values()) {
+        for (const cat of set) {
+          categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;
+        }
+      }
+      const maxVotes = Math.max(...Object.values(categoryCounts));
+      const winningCategories = categories.filter(
+        (c) => categoryCounts[c] === maxVotes
+      );
+
+      const winners = state.players.filter((p) => {
+        const choice = votes.get(p.name);
+        for (const wc of winningCategories) {
+          if (choice.has(wc)) return true;
+        }
+        return false;
+      });
+      winners.forEach((p) => scoreFor(p.name, 1));
+
+      const details = state.players
+        .map((p) => {
+          const arr = [...votes.get(p.name)];
+          return `${p.name}: ${arr.join(" + ") || "—"}`;
+        })
+        .join(" | ");
+      const voteStats = categories
+        .map((cat) => `${cat}: ${categoryCounts[cat] ?? 0}`)
+        .join(" | ");
+      playGoodSound();
+      const recent = n.recent2015_2024 ?? 0;
+      const old = n.old1900_1980 ?? 0;
+      const total = n.total ?? 0;
+      setFeedback(
+        `Scores par case (nombre de joueurs qui l'ont cochée) : max = ${maxVotes} → ${winningCategories.join(
+          " / "
+        )}. +1 si tu as coché au moins une de ces cases gagnantes. ${details} — Contexte INSEE : ${formatCount(
+          recent
+        )} naissances en 2015-2024, ${formatCount(
+          old
+        )} en 1900-1980, ${formatCount(
+          total
+        )} au total (France). Détail des cases : ${voteStats}.`,
+        "ok"
+      );
+      renderScores();
+      updateProgress();
+      state.currentChallenge = null;
+    };
+    answerArea.appendChild(confirmBtn);
   }
 
   renderVotingForCurrentPlayer();
