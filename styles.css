@@ -300,6 +300,109 @@ label {
   font-size: 14px;
 }
 
+.context-visual {
+  margin: 10px 0 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.context-block {
+  padding: 12px;
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.context-heading {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #d8dcff;
+  letter-spacing: 0.02em;
+}
+
+.geo-hint {
+  margin: 0 0 10px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.leaflet-map {
+  height: 200px;
+  width: 100%;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.leaflet-map .leaflet-container {
+  font-family: inherit;
+}
+
+.geo-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.geo-link {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent2);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.geo-link:hover {
+  color: #9aefff;
+}
+
+.timeline-canvas-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+#timelineCanvas {
+  display: block;
+  max-width: 100%;
+}
+
+.chart-legend {
+  margin-top: 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.chart-legend-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  margin-bottom: 6px;
+}
+
+.chart-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.chart-legend-item i {
+  width: 14px;
+  height: 3px;
+  border-radius: 2px;
+  font-style: normal;
+  flex-shrink: 0;
+}
+
+.chart-legend-highlights {
+  font-size: 11px;
+  opacity: 0.92;
+}
+
 @keyframes floatBlob {
   0%,
   100% {
