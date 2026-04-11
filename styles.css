@@ -160,6 +160,15 @@ button:active {
   border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
+/* Manche suivante : au-dessus des calques Leaflet, grosse zone tactile (mobile). */
+#nextRoundBtn {
+  position: relative;
+  z-index: 600;
+  min-height: 48px;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: rgba(127, 140, 255, 0.35);
+}
+
 button:hover {
   filter: brightness(1.08);
   transform: translateY(-1px);
@@ -431,8 +440,5 @@ label {
     grid-template-columns: 1fr;
   }
 
-  .btn-secondary {
-    position: sticky;
-    bottom: 10px;
-  }
+  /* sticky retiré : chevauchement / taps perdus sur certains mobiles */
 }

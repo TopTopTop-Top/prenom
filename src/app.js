@@ -296,6 +296,21 @@ function lockAnswers() {
   });
 }
 
+/**
+ * Après une réponse : graphique optionnel puis libère la manche (toujours, même si le graphique plante).
+ */
+function endChallengeRound(chartFn, afterRelease) {
+  if (endGameIfWinner()) return;
+  try {
+    if (chartFn) chartFn();
+  } catch (err) {
+    console.error(err);
+  } finally {
+    state.currentChallenge = null;
+    if (afterRelease) afterRelease();
+  }
+}
+
 function askDuelPopularity(player) {
   const [a, b] = pickTwoDistinct(state.data.names);
   const duelDiff = resolveDifficulty();
@@ -358,31 +373,31 @@ function askDuelPopularity(player) {
       }
       renderScores();
       updateProgress();
-      if (endGameIfWinner()) return;
-      showTimelineChart({
-        series: [
-          {
-            label: displayName(a.prenom, a.sexTotals),
-            color: "#7f8cff",
-            yearly: a.yearly,
-          },
-          {
-            label: displayName(b.prenom, b.sexTotals),
-            color: "#39d8ff",
-            yearly: b.yearly,
-          },
-        ],
-        highlights: [
-          {
-            from: start,
-            to: end,
-            fill: "rgba(255, 226, 123, 0.22)",
-            label: `Période de la question (${start}–${end})`,
-          },
-        ],
-        caption: `Naissances par an en France (1900–2024) — surbrillance : la période du duel`,
-      });
-      state.currentChallenge = null;
+      endChallengeRound(() =>
+        showTimelineChart({
+          series: [
+            {
+              label: displayName(a.prenom, a.sexTotals),
+              color: "#7f8cff",
+              yearly: a.yearly,
+            },
+            {
+              label: displayName(b.prenom, b.sexTotals),
+              color: "#39d8ff",
+              yearly: b.yearly,
+            },
+          ],
+          highlights: [
+            {
+              from: start,
+              to: end,
+              fill: "rgba(255, 226, 123, 0.22)",
+              label: `Période de la question (${start}–${end})`,
+            },
+          ],
+          caption: `Naissances par an en France (1900–2024) — surbrillance : la période du duel`,
+        })
+      );
     });
     answerArea.appendChild(btn);
   });
@@ -616,42 +631,45 @@ function askYoungAdultOldVote() {
       );
       renderScores();
       updateProgress();
-      if (endGameIfWinner()) return;
-      showTimelineChart({
-        series: [
-          {
-            label: displayName(n.prenom, n.sexTotals),
-            color: "#7f8cff",
-            yearly: n.yearly,
-          },
-        ],
-        highlights: [
-          {
-            from: 1900,
-            to: 1980,
-            fill: "rgba(255, 180, 120, 0.22)",
-            label: "Repère « personne âgée » (1900–1980, INSEE)",
-          },
-          {
-            from: 1981,
-            to: 2014,
-            fill: "rgba(120, 200, 255, 0.16)",
-            label: "Repère « adulte » (1981–2014, approximatif)",
-          },
-          {
-            from: 2015,
-            to: 2024,
-            fill: "rgba(32, 209, 143, 0.2)",
-            label: "Repère « enfant » (2015–2024, INSEE)",
-          },
-        ],
-        caption:
-          "Évolution du prénom en France — bandes = repères du vote (l’adulte est une plage intermédiaire indicative)",
-      });
-      state.currentChallenge = null;
-      answerArea.innerHTML = "";
-      answerArea.className = "answer-grid";
-      roundTitle.textContent = `Manche ${state.currentRound} - Vote collectif`;
+      endChallengeRound(
+        () =>
+          showTimelineChart({
+            series: [
+              {
+                label: displayName(n.prenom, n.sexTotals),
+                color: "#7f8cff",
+                yearly: n.yearly,
+              },
+            ],
+            highlights: [
+              {
+                from: 1900,
+                to: 1980,
+                fill: "rgba(255, 180, 120, 0.22)",
+                label: "Repère « personne âgée » (1900–1980, INSEE)",
+              },
+              {
+                from: 1981,
+                to: 2014,
+                fill: "rgba(120, 200, 255, 0.16)",
+                label: "Repère « adulte » (1981–2014, approximatif)",
+              },
+              {
+                from: 2015,
+                to: 2024,
+                fill: "rgba(32, 209, 143, 0.2)",
+                label: "Repère « enfant » (2015–2024, INSEE)",
+              },
+            ],
+            caption:
+              "Évolution du prénom en France — bandes = repères du vote (l’adulte est une plage intermédiaire indicative)",
+          }),
+        () => {
+          answerArea.innerHTML = "";
+          answerArea.className = "answer-grid";
+          roundTitle.textContent = `Manche ${state.currentRound} - Vote collectif`;
+        }
+      );
     };
     answerArea.appendChild(confirmBtn);
   }
@@ -794,19 +812,19 @@ function askDepartmentChallenge(player) {
         }
         renderScores();
         updateProgress();
-        if (endGameIfWinner()) return;
-        showTimelineChart(
-          {
-            series: timelineSeriesFromPrenoms(
-              options.map((o) => o.name),
-              options.map((o) => displayName(o.name, o.sexTotals))
-            ),
-            caption:
-              "France entière : naissances par an pour les 4 prénoms (après ta réponse)",
-          },
-          { keepGeo: true }
+        endChallengeRound(() =>
+          showTimelineChart(
+            {
+              series: timelineSeriesFromPrenoms(
+                options.map((o) => o.name),
+                options.map((o) => displayName(o.name, o.sexTotals))
+              ),
+              caption:
+                "France entière : naissances par an pour les 4 prénoms (après ta réponse)",
+            },
+            { keepGeo: true }
+          )
         );
-        state.currentChallenge = null;
       }
     );
     answerArea.appendChild(btn);
@@ -815,6 +833,10 @@ function askDepartmentChallenge(player) {
 
 function nextRound() {
   if (state.currentChallenge) {
+    setFeedback(
+      "Termine d’abord la manche en cours (réponse ou tous les votes au vote collectif), puis réessaie.",
+      "bad"
+    );
     return;
   }
   if (endGameIfWinner()) {
