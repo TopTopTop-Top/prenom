@@ -424,6 +424,9 @@ function askPeakYear(player) {
     n.sexTotals
   )} a atteint son pic ? (manche ${diffLabel})`;
 
+  const choiceMin = Math.min(...choices);
+  const choiceMax = Math.max(...choices);
+
   choices.forEach((year) => {
     const btn = createAnswerButton(String(year), () => {
       lockAnswers();
@@ -468,31 +471,31 @@ function askPeakYear(player) {
       }
       renderScores();
       updateProgress();
-      if (endGameIfWinner()) return;
-      showTimelineChart({
-        series: [
-          {
-            label: displayName(n.prenom, n.sexTotals),
-            color: "#7f8cff",
-            yearly: n.yearly,
-          },
-        ],
-        highlights: [
-          {
-            from: choiceMin,
-            to: choiceMax,
-            fill: "rgba(127, 140, 255, 0.2)",
-            label: `Années proposées (${choiceMin}–${choiceMax})`,
-          },
-        ],
-        markYears: choices.map((y) => ({
-          year: y,
-          color: "rgba(255, 226, 123, 0.9)",
-          width: 2,
-        })),
-        caption: `Historique national du prénom — bande et traits : années proposées ; pic réel en ${n.peak.year}`,
-      });
-      state.currentChallenge = null;
+      endChallengeRound(() =>
+        showTimelineChart({
+          series: [
+            {
+              label: displayName(n.prenom, n.sexTotals),
+              color: "#7f8cff",
+              yearly: n.yearly,
+            },
+          ],
+          highlights: [
+            {
+              from: choiceMin,
+              to: choiceMax,
+              fill: "rgba(127, 140, 255, 0.2)",
+              label: `Années proposées (${choiceMin}–${choiceMax})`,
+            },
+          ],
+          markYears: choices.map((y) => ({
+            year: y,
+            color: "rgba(255, 226, 123, 0.9)",
+            width: 2,
+          })),
+          caption: `Historique national du prénom — bande et traits : années proposées ; pic réel en ${n.peak.year}`,
+        })
+      );
     });
     answerArea.appendChild(btn);
   });
