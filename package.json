@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "build:data": "node scripts/build-game-data.mjs",
+    "build:dept-centres": "node scripts/build-department-centres.mjs",
     "start": "python3 -m http.server 8080"
   }
 }

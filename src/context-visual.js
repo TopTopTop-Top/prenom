@@ -18,7 +18,8 @@ export const REGION_MAP_FOCUS = {
   44: { lat: 48.5, lon: 6.2, zoom: 7 },
   52: { lat: 47.45, lon: -0.85, zoom: 8 },
   53: { lat: 48.2, lon: -2.8, zoom: 8 },
-  75: { lat: 44.8, lon: -0.6, zoom: 7 },
+  /** Centroid approximatif de la région (OSM), pas Bordeaux — pour vue « région » seulement. */
+  75: { lat: 45.4, lon: 0.38, zoom: 7 },
   76: { lat: 43.6, lon: 2.5, zoom: 7 },
   84: { lat: 45.4, lon: 4.4, zoom: 7 },
   93: { lat: 43.9, lon: 6.2, zoom: 7 },
@@ -26,6 +27,20 @@ export const REGION_MAP_FOCUS = {
 };
 
 const DEFAULT_FOCUS = { lat: 46.5, lon: 2.5, zoom: 5 };
+
+const departmentCentresUrl = "./data/department-centres.json";
+/** @type {Promise<Record<string, { lat: number, lon: number, zoom?: number }>> | null} */
+let departmentCentresPromise = null;
+
+function loadDepartmentCentres() {
+  if (!departmentCentresPromise) {
+    departmentCentresPromise = fetch(departmentCentresUrl)
+      .then((r) => (r.ok ? r.json() : { centres: {} }))
+      .then((j) => j.centres || {})
+      .catch(() => ({}));
+  }
+  return departmentCentresPromise;
+}
 
 let leafletMap = null;
 /** Incrémenté à chaque reset : ignore les fetch carte arrivés trop tard. */
@@ -113,7 +128,7 @@ export function showRegionGeoContext(region) {
   const focus = REGION_MAP_FOCUS[region.code] || DEFAULT_FOCUS;
   const query = `${region.name}, région France`;
   hint.textContent =
-    "Repère la région sur la carte (vue d’ensemble). Pour zoomer sur un lieu précis, utilise les liens ci-dessous.";
+    "Repère la région sur la carte (centre approximatif de la région, pas une ville en particulier). Affiner avec les liens ci-dessous.";
   setGeoLinks(query);
   initLeafletMap(
     focus.lat,
@@ -138,6 +153,8 @@ export async function showDepartmentGeoContext(dpt) {
 
   let codeRegion = null;
   let apiNom = dpt.name;
+  const centresPromise = loadDepartmentCentres();
+
   try {
     const res = await fetch(
       `https://geo.api.gouv.fr/departements/${encodeURIComponent(dpt.code)}`
@@ -151,6 +168,9 @@ export async function showDepartmentGeoContext(dpt) {
     /* réseau / CORS rare */
   }
 
+  const centres = await centresPromise;
+  const deptCenter = centres[String(dpt.code)];
+
   if (epochAtStart !== mapEpoch) {
     return;
   }
@@ -159,18 +179,35 @@ export async function showDepartmentGeoContext(dpt) {
     codeRegion = "94";
   }
 
-  const focus = (codeRegion && REGION_MAP_FOCUS[codeRegion]) || DEFAULT_FOCUS;
   const query = `${dpt.name} département France`;
+  setGeoLinks(query);
+
+  if (
+    deptCenter &&
+    typeof deptCenter.lat === "number" &&
+    typeof deptCenter.lon === "number"
+  ) {
+    hint.textContent =
+      `Marqueur au centre géographique du département ${dpt.name} (données OpenStreetMap / Nominatim, fichier local). Les liens permettent d’affiner.`;
+    initLeafletMap(
+      deptCenter.lat,
+      deptCenter.lon,
+      deptCenter.zoom ?? 9,
+      `<strong>${apiNom}</strong> (${dpt.code})<br>Centre du département sur la carte.`
+    );
+    return;
+  }
+
+  const focus = (codeRegion && REGION_MAP_FOCUS[codeRegion]) || DEFAULT_FOCUS;
   hint.textContent = codeRegion
-    ? `Le département se situe dans sa région (carte centrée sur la région). Cherche « ${dpt.name} » avec les liens pour un zoom précis.`
+    ? `Pas de centre départemental en base — vue régionale. Cherche « ${dpt.name} » avec les liens pour un zoom précis.`
     : `Localise le département avec les liens ci-dessous (carte France).`;
 
-  setGeoLinks(query);
   initLeafletMap(
     focus.lat,
     focus.lon,
     focus.zoom,
-    `<strong>${apiNom}</strong> (${dpt.code})<br>Département — carte centrée sur la région parente.`
+    `<strong>${apiNom}</strong> (${dpt.code})<br>Département — repli : carte centrée sur la région parente.`
   );
 }
 
