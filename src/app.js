@@ -230,6 +230,21 @@ function checkWinner() {
   return winner;
 }
 
+/** Si un joueur atteint l’objectif : fin de partie et retour à l’écran paramètres. */
+function endGameIfWinner() {
+  const winner = checkWinner();
+  if (!winner) return false;
+  playGoodSound();
+  alert(
+    `${winner.name} gagne la partie avec ${winner.score} points (objectif ${state.targetScore}).`
+  );
+  state.currentChallenge = null;
+  clearChallengeUi();
+  nextRoundBtn.disabled = true;
+  gameSection.classList.add("hidden");
+  return true;
+}
+
 function clearChallengeUi() {
   answerArea.innerHTML = "";
   feedback.textContent = "";
@@ -319,6 +334,7 @@ function askDuelPopularity(player) {
       }
       renderScores();
       updateProgress();
+      if (endGameIfWinner()) return;
       state.currentChallenge = null;
     });
     answerArea.appendChild(btn);
@@ -390,6 +406,7 @@ function askPeakYear(player) {
       }
       renderScores();
       updateProgress();
+      if (endGameIfWinner()) return;
       state.currentChallenge = null;
     });
     answerArea.appendChild(btn);
@@ -515,19 +532,24 @@ function askYoungAdultOldVote() {
       const groupsMsg =
         groupsText ||
         "Aucune combinaison en double (au moins 2 joueurs identiques requis).";
+      const voteSummary = `${pointsMsg} Groupes identiques : ${groupsMsg} — ${details} — Contexte INSEE : ${formatCount(
+        recent
+      )} naissances en 2015-2024, ${formatCount(
+        old
+      )} en 1900-1980, ${formatCount(
+        total
+      )} au total (France). Cases cochées (tous joueurs) : ${voteStats}.`;
       setFeedback(
-        `${pointsMsg} Groupes identiques : ${groupsMsg} — ${details} — Contexte INSEE : ${formatCount(
-          recent
-        )} naissances en 2015-2024, ${formatCount(
-          old
-        )} en 1900-1980, ${formatCount(
-          total
-        )} au total (France). Cases cochées (tous joueurs) : ${voteStats}.`,
+        `${voteSummary} — Tous les joueurs ont voté. Passez à la manche suivante.`,
         "ok"
       );
       renderScores();
       updateProgress();
+      if (endGameIfWinner()) return;
       state.currentChallenge = null;
+      answerArea.innerHTML = "";
+      answerArea.className = "answer-grid";
+      roundTitle.textContent = `Manche ${state.currentRound} - Vote collectif`;
     };
     answerArea.appendChild(confirmBtn);
   }
@@ -591,6 +613,7 @@ function askRegionChallenge(player) {
         }
         renderScores();
         updateProgress();
+        if (endGameIfWinner()) return;
         state.currentChallenge = null;
       }
     );
@@ -654,6 +677,7 @@ function askDepartmentChallenge(player) {
         }
         renderScores();
         updateProgress();
+        if (endGameIfWinner()) return;
         state.currentChallenge = null;
       }
     );
@@ -663,6 +687,9 @@ function askDepartmentChallenge(player) {
 
 function nextRound() {
   if (state.currentChallenge) {
+    return;
+  }
+  if (endGameIfWinner()) {
     return;
   }
   clearChallengeUi();
@@ -682,18 +709,6 @@ function nextRound() {
 
   state.currentChallenge = pickRandom(challengeFns);
   state.currentChallenge();
-
-  const winner = checkWinner();
-  if (winner) {
-    playGoodSound();
-    setFeedback(
-      `${winner.name} gagne la partie avec ${winner.score} points !`,
-      "ok"
-    );
-    state.currentChallenge = null;
-    nextRoundBtn.disabled = true;
-    return;
-  }
 
   state.currentPlayerIndex =
     (state.currentPlayerIndex + 1) % state.players.length;
