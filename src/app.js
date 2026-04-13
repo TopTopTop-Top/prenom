@@ -207,6 +207,51 @@ function formatNameStats(options) {
     .join(" | ");
 }
 
+function getNationalTotalBirths() {
+  return state.data?.names?.reduce((sum, n) => sum + (n.total || 0), 0) || 1;
+}
+
+function getNationalNameTotal(prenom) {
+  return findNameEntry(prenom)?.total || 0;
+}
+
+/**
+ * Score "localité" : part du prénom dans le territoire / part nationale du prénom.
+ * > 1 = surreprésenté localement, < 1 = sous-représenté.
+ */
+function territoryLiftScore(nameValue, territoryTotal, nationalTotal) {
+  const localShare = territoryTotal > 0 ? nameValue / territoryTotal : 0;
+  const nationalNameTotal = getNationalNameTotal(nameValue.name);
+  const nationalShare =
+    nationalTotal > 0 ? nationalNameTotal / nationalTotal : 0.0000001;
+  if (nationalShare <= 0) return 0;
+  return localShare / nationalShare;
+}
+
+function buildTerritoryLiftRanking(territory, minLocalValue = 80) {
+  const nationalTotal = getNationalTotalBirths();
+  return territory.topNames
+    .filter((x) => (x.value || 0) >= minLocalValue)
+    .map((x) => ({
+      ...x,
+      lift: territoryLiftScore(x, territory.total, nationalTotal),
+      localShare: territory.total > 0 ? x.value / territory.total : 0,
+    }))
+    .filter((x) => Number.isFinite(x.lift) && x.lift > 0)
+    .sort((a, b) => b.lift - a.lift);
+}
+
+function pickTopNameOfYear(year) {
+  let best = null;
+  for (const n of state.data.names) {
+    const value = n.yearly?.[String(year)] || 0;
+    if (!best || value > best.value) {
+      best = { name: n.prenom, value, sexTotals: n.sexTotals };
+    }
+  }
+  return best;
+}
+
 function findNameEntry(prenom) {
   return state.data?.names?.find((x) => x.prenom === prenom) ?? null;
 }
@@ -684,11 +729,13 @@ function askYoungAdultOldVote() {
 
 function askRegionChallenge(player) {
   const region = pickRandom(state.data.regions);
-  const top = region.topNames.slice(0, 8);
-  const answer = top[0];
+  const ranked = buildTerritoryLiftRanking(region, 120);
+  const pool =
+    ranked.length >= 6 ? ranked.slice(0, 12) : region.topNames.slice(0, 12);
+  const answer = pool[0];
   const options = [answer];
   while (options.length < 4) {
-    const candidate = pickRandom(top);
+    const candidate = pickRandom(pool);
     if (!options.some((opt) => opt.name === candidate.name)) {
       options.push(candidate);
     }
@@ -696,7 +743,7 @@ function askRegionChallenge(player) {
   options.sort(() => Math.random() - 0.5);
   const optionsStats = formatNameStats(options);
 
-  roundDescription.textContent = `${player.name}, quel prénom est le plus donné dans la région ${region.name} ?`;
+  roundDescription.textContent = `${player.name}, quel prénom est le plus "local" dans la région ${region.name} (surreprésenté vs France entière) ?`;
 
   showRegionGeoContext(region);
 
@@ -713,9 +760,11 @@ function askRegionChallenge(player) {
             `Correct ! +2 pts. ${displayName(
               answer.name,
               answer.sexTotals
-            )} : ${formatCount(answer.value)} naissances cumulées (${
+            )} a l'indice local le plus élevé dans ${
               region.name
-            }). Toutes les propositions : ${optionsStats}.`,
+            }. Volume local: ${formatCount(
+              answer.value
+            )}. Toutes les propositions : ${optionsStats}.`,
             "ok"
           );
         } else {
@@ -725,7 +774,9 @@ function askRegionChallenge(player) {
             `Non. C'était ${displayName(
               answer.name,
               answer.sexTotals
-            )} (${formatCount(answer.value)}). Tu avais choisi ${displayName(
+            )} (indice local le plus élevé, volume ${formatCount(
+              answer.value
+            )}). Tu avais choisi ${displayName(
               option.name,
               option.sexTotals
             )} (${formatCount(
@@ -761,11 +812,13 @@ function askRegionChallenge(player) {
 
 function askDepartmentChallenge(player) {
   const dpt = pickRandom(state.data.departments);
-  const top = dpt.topNames.slice(0, 8);
-  const answer = top[0];
+  const ranked = buildTerritoryLiftRanking(dpt, 40);
+  const pool =
+    ranked.length >= 6 ? ranked.slice(0, 12) : dpt.topNames.slice(0, 12);
+  const answer = pool[0];
   const options = [answer];
   while (options.length < 4) {
-    const candidate = pickRandom(top);
+    const candidate = pickRandom(pool);
     if (!options.some((opt) => opt.name === candidate.name)) {
       options.push(candidate);
     }
@@ -773,7 +826,7 @@ function askDepartmentChallenge(player) {
   options.sort(() => Math.random() - 0.5);
   const optionsStats = formatNameStats(options);
 
-  roundDescription.textContent = `${player.name}, quel prénom domine dans le département ${dpt.name} (${dpt.code}) ?`;
+  roundDescription.textContent = `${player.name}, quel prénom est le plus "local" dans le département ${dpt.name} (${dpt.code}) (surreprésenté vs France entière) ?`;
 
   void showDepartmentGeoContext(dpt);
 
@@ -790,9 +843,11 @@ function askDepartmentChallenge(player) {
             `Correct ! +2 pts. ${displayName(
               answer.name,
               answer.sexTotals
-            )} : ${formatCount(answer.value)} naissances cumulées (${
+            )} a l'indice local le plus élevé dans ${
               dpt.name
-            }). Toutes les propositions : ${optionsStats}.`,
+            }. Volume local: ${formatCount(
+              answer.value
+            )}. Toutes les propositions : ${optionsStats}.`,
             "ok"
           );
         } else {
@@ -802,7 +857,9 @@ function askDepartmentChallenge(player) {
             `Rate. C'était ${displayName(
               answer.name,
               answer.sexTotals
-            )} (${formatCount(answer.value)}). Choix : ${displayName(
+            )} (indice local le plus élevé, volume ${formatCount(
+              answer.value
+            )}). Choix : ${displayName(
               option.name,
               option.sexTotals
             )} (${formatCount(
@@ -836,6 +893,88 @@ function askDepartmentChallenge(player) {
   });
 }
 
+function askTopNameByYear(player) {
+  const year = 1950 + randomInt(2024 - 1950 + 1);
+  const best = pickTopNameOfYear(year);
+  if (!best || best.value <= 0) {
+    return askPeakYear(player);
+  }
+
+  const candidates = state.data.names
+    .map((n) => ({
+      name: n.prenom,
+      value: n.yearly?.[String(year)] || 0,
+      sexTotals: n.sexTotals,
+    }))
+    .filter((x) => x.value > 0)
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 16);
+
+  const answer = candidates[0];
+  const options = [answer];
+  while (options.length < 4) {
+    const candidate = pickRandom(candidates);
+    if (!options.some((o) => o.name === candidate.name)) {
+      options.push(candidate);
+    }
+  }
+  options.sort(() => Math.random() - 0.5);
+
+  roundDescription.textContent = `${player.name}, en ${year}, quel prénom a été le plus donné en France ?`;
+
+  options.forEach((option) => {
+    const btn = createAnswerButton(
+      displayName(option.name, option.sexTotals),
+      () => {
+        lockAnswers();
+        if (option.name === answer.name) {
+          scoreFor(player.name, 2);
+          btn.classList.add("correct");
+          playGoodSound();
+          setFeedback(
+            `Exact ! +2 pts. En ${year}, ${displayName(
+              answer.name,
+              answer.sexTotals
+            )} est #1 avec ${formatCount(answer.value)} naissances en France.`,
+            "ok"
+          );
+        } else {
+          btn.classList.add("wrong");
+          playBadSound();
+          setFeedback(
+            `Non. En ${year}, le #1 est ${displayName(
+              answer.name,
+              answer.sexTotals
+            )} (${formatCount(answer.value)}).`,
+            "bad"
+          );
+          answerArea.querySelectorAll("button").forEach((b) => {
+            if (b.textContent.startsWith(`${answer.name} `)) {
+              b.classList.add("correct");
+            }
+          });
+        }
+        renderScores();
+        updateProgress();
+        endChallengeRound(() =>
+          showTimelineChart({
+            series: [
+              {
+                label: displayName(answer.name, answer.sexTotals),
+                color: "#7f8cff",
+                yearly: findNameEntry(answer.name)?.yearly || {},
+              },
+            ],
+            markYears: [{ year, color: "rgba(255, 226, 123, 0.9)", width: 2 }],
+            caption: `Prénom #1 en ${year} : évolution nationale du prénom gagnant`,
+          })
+        );
+      }
+    );
+    answerArea.appendChild(btn);
+  });
+}
+
 function nextRound() {
   if (state.currentChallenge) {
     setFeedback(
@@ -860,6 +999,7 @@ function nextRound() {
     () => askYoungAdultOldVote(),
     () => askRegionChallenge(player),
     () => askDepartmentChallenge(player),
+    () => askTopNameByYear(player),
   ];
 
   state.currentChallenge = pickRandom(challengeFns);
