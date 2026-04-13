@@ -15,6 +15,7 @@ const state = {
   difficulty: "normal",
   data: null,
   currentChallenge: null,
+  nationalRankByName: {},
 };
 
 const playersInput = document.getElementById("players");
@@ -207,38 +208,36 @@ function formatNameStats(options) {
     .join(" | ");
 }
 
-function getNationalTotalBirths() {
-  return state.data?.names?.reduce((sum, n) => sum + (n.total || 0), 0) || 1;
-}
-
-function getNationalNameTotal(prenom) {
-  return findNameEntry(prenom)?.total || 0;
+function buildNationalRankByName() {
+  const sorted = [...(state.data?.names || [])].sort((a, b) => b.total - a.total);
+  const map = {};
+  sorted.forEach((n, i) => {
+    map[n.prenom] = i + 1;
+  });
+  return map;
 }
 
 /**
- * Score "localité" : part du prénom dans le territoire / part nationale du prénom.
- * > 1 = surreprésenté localement, < 1 = sous-représenté.
+ * Distracteurs locaux: évite autant que possible les top nationaux.
+ * La bonne réponse reste le #1 local, mais les autres options sont moins "évidentes".
  */
-function territoryLiftScore(nameValue, territoryTotal, nationalTotal) {
-  const localShare = territoryTotal > 0 ? nameValue / territoryTotal : 0;
-  const nationalNameTotal = getNationalNameTotal(nameValue.name);
-  const nationalShare =
-    nationalTotal > 0 ? nationalNameTotal / nationalTotal : 0.0000001;
-  if (nationalShare <= 0) return 0;
-  return localShare / nationalShare;
-}
-
-function buildTerritoryLiftRanking(territory, minLocalValue = 80) {
-  const nationalTotal = getNationalTotalBirths();
-  return territory.topNames
+function buildTerritoryOptionPool(
+  territory,
+  minLocalValue = 80,
+  avoidTopNationalRank = 120
+) {
+  const localTop = territory.topNames
     .filter((x) => (x.value || 0) >= minLocalValue)
-    .map((x) => ({
-      ...x,
-      lift: territoryLiftScore(x, territory.total, nationalTotal),
-      localShare: territory.total > 0 ? x.value / territory.total : 0,
-    }))
-    .filter((x) => Number.isFinite(x.lift) && x.lift > 0)
-    .sort((a, b) => b.lift - a.lift);
+    .sort((a, b) => b.value - a.value);
+
+  const lessNational = localTop.filter((x) => {
+    const rank = state.nationalRankByName[x.name] || Number.MAX_SAFE_INTEGER;
+    return rank > avoidTopNationalRank;
+  });
+
+  if (lessNational.length >= 6) return lessNational.slice(0, 14);
+  if (localTop.length >= 6) return localTop.slice(0, 14);
+  return territory.topNames.slice(0, 14);
 }
 
 function pickTopNameOfYear(year) {
@@ -729,21 +728,19 @@ function askYoungAdultOldVote() {
 
 function askRegionChallenge(player) {
   const region = pickRandom(state.data.regions);
-  const ranked = buildTerritoryLiftRanking(region, 120);
-  const pool =
-    ranked.length >= 6 ? ranked.slice(0, 12) : region.topNames.slice(0, 12);
-  const answer = pool[0];
+  const answer = region.topNames[0];
+  const pool = buildTerritoryOptionPool(region, 120, 100);
   const options = [answer];
   while (options.length < 4) {
     const candidate = pickRandom(pool);
-    if (!options.some((opt) => opt.name === candidate.name)) {
+    if (candidate?.name && !options.some((opt) => opt.name === candidate.name)) {
       options.push(candidate);
     }
   }
   options.sort(() => Math.random() - 0.5);
   const optionsStats = formatNameStats(options);
 
-  roundDescription.textContent = `${player.name}, quel prénom est le plus "local" dans la région ${region.name} (surreprésenté vs France entière) ?`;
+  roundDescription.textContent = `${player.name}, quel prénom est le plus donné dans la région ${region.name} ?`;
 
   showRegionGeoContext(region);
 
@@ -760,11 +757,9 @@ function askRegionChallenge(player) {
             `Correct ! +2 pts. ${displayName(
               answer.name,
               answer.sexTotals
-            )} a l'indice local le plus élevé dans ${
+            )} : ${formatCount(answer.value)} naissances cumulées (${
               region.name
-            }. Volume local: ${formatCount(
-              answer.value
-            )}. Toutes les propositions : ${optionsStats}.`,
+            }). Toutes les propositions : ${optionsStats}.`,
             "ok"
           );
         } else {
@@ -774,9 +769,7 @@ function askRegionChallenge(player) {
             `Non. C'était ${displayName(
               answer.name,
               answer.sexTotals
-            )} (indice local le plus élevé, volume ${formatCount(
-              answer.value
-            )}). Tu avais choisi ${displayName(
+            )} (${formatCount(answer.value)}). Tu avais choisi ${displayName(
               option.name,
               option.sexTotals
             )} (${formatCount(
@@ -812,21 +805,19 @@ function askRegionChallenge(player) {
 
 function askDepartmentChallenge(player) {
   const dpt = pickRandom(state.data.departments);
-  const ranked = buildTerritoryLiftRanking(dpt, 40);
-  const pool =
-    ranked.length >= 6 ? ranked.slice(0, 12) : dpt.topNames.slice(0, 12);
-  const answer = pool[0];
+  const answer = dpt.topNames[0];
+  const pool = buildTerritoryOptionPool(dpt, 40, 100);
   const options = [answer];
   while (options.length < 4) {
     const candidate = pickRandom(pool);
-    if (!options.some((opt) => opt.name === candidate.name)) {
+    if (candidate?.name && !options.some((opt) => opt.name === candidate.name)) {
       options.push(candidate);
     }
   }
   options.sort(() => Math.random() - 0.5);
   const optionsStats = formatNameStats(options);
 
-  roundDescription.textContent = `${player.name}, quel prénom est le plus "local" dans le département ${dpt.name} (${dpt.code}) (surreprésenté vs France entière) ?`;
+  roundDescription.textContent = `${player.name}, quel prénom domine dans le département ${dpt.name} (${dpt.code}) ?`;
 
   void showDepartmentGeoContext(dpt);
 
@@ -843,11 +834,7 @@ function askDepartmentChallenge(player) {
             `Correct ! +2 pts. ${displayName(
               answer.name,
               answer.sexTotals
-            )} a l'indice local le plus élevé dans ${
-              dpt.name
-            }. Volume local: ${formatCount(
-              answer.value
-            )}. Toutes les propositions : ${optionsStats}.`,
+            )} : ${formatCount(answer.value)} naissances cumulées (${dpt.name}). Toutes les propositions : ${optionsStats}.`,
             "ok"
           );
         } else {
@@ -857,9 +844,7 @@ function askDepartmentChallenge(player) {
             `Rate. C'était ${displayName(
               answer.name,
               answer.sexTotals
-            )} (indice local le plus élevé, volume ${formatCount(
-              answer.value
-            )}). Choix : ${displayName(
+            )} (${formatCount(answer.value)}). Choix : ${displayName(
               option.name,
               option.sexTotals
             )} (${formatCount(
@@ -1040,6 +1025,7 @@ startBtn.onclick = async () => {
 
   try {
     state.data = await loadData();
+    state.nationalRankByName = buildNationalRankByName();
   } catch (error) {
     alert(error.message);
     return;
