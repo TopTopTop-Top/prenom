@@ -1212,6 +1212,8 @@ function nextRound() {
     () => askRegionChallenge(player),
     () => askDepartmentChallenge(player),
     () => askRegionDateChallenge(player),
+    () => askRegionDateChallenge(player),
+    () => askDepartmentDateChallenge(player),
     () => askDepartmentDateChallenge(player),
     () => askTopNameByYear(player),
     () => askTopNameByYear(player),

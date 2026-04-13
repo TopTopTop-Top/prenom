@@ -7,7 +7,7 @@ const natCsvPath =
 const regCsvPath =
   process.env.REG_CSV || "/Users/robert/Downloads/prenoms-2024-reg.csv";
 const dptCsvPath =
-  process.env.DPT_CSV || "/Users/robert/Downloads/prenoms-2024-dpt 2.csv";
+  process.env.DPT_CSV || "/Users/robert/Downloads/prenoms-2024-dpt.csv";
 const outPath = path.resolve("data/game-data.json");
 
 const REGIONS = {
@@ -265,15 +265,20 @@ async function parseDepartments() {
       continue;
     }
 
-    const [sexeRaw, prenomRaw, periodeRaw, dptRaw, valeurRaw] = line.split(";");
+    const parts = line.split(";");
+    if (parts.length < 5) {
+      continue;
+    }
+    const [sexeRaw, prenomRaw, periodeRaw, dptRaw, valeurRaw] = parts;
     const prenom = normalizeName(prenomRaw);
     const period = Number.parseInt(periodeRaw, 10);
     const value = Number.parseInt(valeurRaw, 10);
     const sexe = Number.parseInt(sexeRaw, 10);
-    const dptCode = dptRaw.trim();
+    const dptCode = (dptRaw || "").trim();
 
     if (
       !prenom ||
+      !dptCode ||
       Number.isNaN(period) ||
       Number.isNaN(value) ||
       Number.isNaN(sexe)
