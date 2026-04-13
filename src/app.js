@@ -512,7 +512,8 @@ function askYoungAdultOldVote() {
   /** @type {Map<string, Set<string>>} */
   const votes = new Map();
   state.players.forEach((p) => votes.set(p.name, new Set()));
-  let pendingPlayerIndex = 0;
+  let pendingPlayerIndex = state.currentPlayerIndex;
+  let votesSubmitted = 0;
   answerArea.className = "answer-grid vote-mode";
 
   function renderVotingForCurrentPlayer() {
@@ -555,8 +556,9 @@ function askYoungAdultOldVote() {
       }
       playClickSound();
       votes.set(current.name, new Set(selected));
-      pendingPlayerIndex += 1;
-      if (pendingPlayerIndex < state.players.length) {
+      votesSubmitted += 1;
+      pendingPlayerIndex = (pendingPlayerIndex + 1) % state.players.length;
+      if (votesSubmitted < state.players.length) {
         renderVotingForCurrentPlayer();
         return;
       }
