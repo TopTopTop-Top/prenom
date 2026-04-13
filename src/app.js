@@ -225,7 +225,8 @@ function buildTerritorySpecificityRanking(territory, minLocalValue = 80) {
     .map((x) => {
       const nationalNameTotal = findNameEntry(x.name)?.total || 0;
       const localShare = territory.total > 0 ? x.value / territory.total : 0;
-      const nationalShare = nationalTotal > 0 ? nationalNameTotal / nationalTotal : 0;
+      const nationalShare =
+        nationalTotal > 0 ? nationalNameTotal / nationalTotal : 0;
       const lift = (localShare + epsilon) / (nationalShare + epsilon);
       const score = Math.log2(lift) * Math.sqrt(x.value);
       return {
@@ -246,7 +247,10 @@ function buildTerritoryQuestionOptions(territory, minLocalValue = 80) {
 
   const distractorBase = ranked
     .filter((x) => x.name !== answer.name)
-    .sort((a, b) => Math.abs(a.score - answer.score) - Math.abs(b.score - answer.score));
+    .sort(
+      (a, b) =>
+        Math.abs(a.score - answer.score) - Math.abs(b.score - answer.score)
+    );
 
   const options = [answer];
   for (const candidate of distractorBase) {
@@ -764,7 +768,7 @@ function askRegionChallenge(player) {
   }
   const optionsStats = formatNameStats(options);
 
-  roundDescription.textContent = `${player.name}, quel prénom est le plus caractéristique de la région ${region.name} (plus local que la moyenne France) ?`;
+  roundDescription.textContent = `${player.name}, quel prénom est le plus donné dans la région ${region.name} ?`;
 
   showRegionGeoContext(region);
 
@@ -781,9 +785,9 @@ function askRegionChallenge(player) {
             `Correct ! +2 pts. ${displayName(
               answer.name,
               answer.sexTotals
-            )} est le plus spécifique localement dans ${
+            )} : ${formatCount(answer.value)} naissances cumulées (${
               region.name
-            } (${formatCount(answer.value)} naissances cumulées). Toutes les propositions : ${optionsStats}.`,
+            }). Toutes les propositions : ${optionsStats}.`,
             "ok"
           );
         } else {
@@ -793,9 +797,7 @@ function askRegionChallenge(player) {
             `Non. C'était ${displayName(
               answer.name,
               answer.sexTotals
-            )} (le plus spécifique localement, ${formatCount(
-              answer.value
-            )}). Tu avais choisi ${displayName(
+            )} (${formatCount(answer.value)}). Tu avais choisi ${displayName(
               option.name,
               option.sexTotals
             )} (${formatCount(
@@ -825,7 +827,7 @@ function askDepartmentChallenge(player) {
   }
   const optionsStats = formatNameStats(options);
 
-  roundDescription.textContent = `${player.name}, quel prénom est le plus caractéristique du département ${dpt.name} (${dpt.code}) ?`;
+  roundDescription.textContent = `${player.name}, quel prénom domine dans le département ${dpt.name} (${dpt.code}) ?`;
 
   void showDepartmentGeoContext(dpt);
 
@@ -842,9 +844,9 @@ function askDepartmentChallenge(player) {
             `Correct ! +2 pts. ${displayName(
               answer.name,
               answer.sexTotals
-            )} est le plus spécifique localement dans ${dpt.name} (${formatCount(
-              answer.value
-            )} naissances cumulées). Toutes les propositions : ${optionsStats}.`,
+            )} : ${formatCount(answer.value)} naissances cumulées (${
+              dpt.name
+            }). Toutes les propositions : ${optionsStats}.`,
             "ok"
           );
         } else {
@@ -854,9 +856,7 @@ function askDepartmentChallenge(player) {
             `Rate. C'était ${displayName(
               answer.name,
               answer.sexTotals
-            )} (le plus spécifique localement, ${formatCount(
-              answer.value
-            )}). Choix : ${displayName(
+            )} (${formatCount(answer.value)}). Choix : ${displayName(
               option.name,
               option.sexTotals
             )} (${formatCount(
@@ -984,6 +984,7 @@ function nextRound() {
     () => askYoungAdultOldVote(),
     () => askRegionChallenge(player),
     () => askDepartmentChallenge(player),
+    () => askTopNameByYear(player),
     () => askTopNameByYear(player),
   ];
 
