@@ -242,7 +242,7 @@ function buildTerritorySpecificityRanking(territory, minLocalValue = 80) {
 
 function buildTerritoryQuestionOptions(territory, minLocalValue = 80) {
   const ranked = buildTerritorySpecificityRanking(territory, minLocalValue);
-  const answer = ranked[0] || territory.topNames[0];
+  const answer = territory.topNames[0] || ranked[0];
   if (!answer) return { answer: null, options: [] };
 
   const distractorBase = ranked
@@ -270,6 +270,77 @@ function buildTerritoryQuestionOptions(territory, minLocalValue = 80) {
     }
   }
 
+  options.sort(() => Math.random() - 0.5);
+  return { answer, options };
+}
+
+function hasTerritoryYearlyData(territory) {
+  return (territory?.topNames || []).some(
+    (x) => x.yearly && Object.keys(x.yearly).length > 0
+  );
+}
+
+function territoryNameValueForRange(nameEntry, start, end) {
+  if (nameEntry?.yearly && Object.keys(nameEntry.yearly).length > 0) {
+    return sumRange(nameEntry.yearly, start, end);
+  }
+  return 0;
+}
+
+function pickYearOrPeriod() {
+  const isSingleYear = randomInt(2) === 0;
+  if (isSingleYear) {
+    const year = 1950 + randomInt(2024 - 1950 + 1);
+    return { start: year, end: year, label: `${year}` };
+  }
+  const periods = [
+    [1900, 1949],
+    [1950, 1979],
+    [1980, 1999],
+    [2000, 2014],
+    [2015, 2024],
+  ];
+  const [start, end] = pickRandom(periods);
+  return { start, end, label: `${start}-${end}` };
+}
+
+function formatTerritoryRangeStats(options, start, end) {
+  return [...options]
+    .sort((a, b) => b.rangeValue - a.rangeValue)
+    .map(
+      (o) =>
+        `${displayName(o.name, o.sexTotals)}: ${formatCount(o.rangeValue)} (${
+          start === end ? `année ${start}` : `${start}-${end}`
+        })`
+    )
+    .join(" | ");
+}
+
+function buildTerritoryRangeQuestionOptions(
+  territory,
+  start,
+  end,
+  minRangeValue
+) {
+  const candidates = (territory.topNames || [])
+    .map((x) => ({
+      ...x,
+      rangeValue: territoryNameValueForRange(x, start, end),
+    }))
+    .filter((x) => x.rangeValue >= minRangeValue)
+    .sort((a, b) => b.rangeValue - a.rangeValue);
+
+  if (candidates.length < 4) return { answer: null, options: [] };
+  const answer = candidates[0];
+  const options = [answer];
+  const pool = candidates.slice(1, 14);
+  while (options.length < 4 && pool.length > 0) {
+    const candidate = pickRandom(pool);
+    if (!options.some((o) => o.name === candidate.name)) {
+      options.push(candidate);
+    }
+  }
+  if (options.length < 4) return { answer: null, options: [] };
   options.sort(() => Math.random() - 0.5);
   return { answer, options };
 }
@@ -878,6 +949,132 @@ function askDepartmentChallenge(player) {
   });
 }
 
+function askRegionDateChallenge(player) {
+  const region = pickRandom(state.data.regions);
+  if (!hasTerritoryYearlyData(region)) {
+    return askRegionChallenge(player);
+  }
+
+  const { start, end, label } = pickYearOrPeriod();
+  const { answer, options } = buildTerritoryRangeQuestionOptions(
+    region,
+    start,
+    end,
+    start === end ? 10 : 40
+  );
+  if (!answer) return askRegionChallenge(player);
+  const optionsStats = formatTerritoryRangeStats(options, start, end);
+
+  roundDescription.textContent = `${player.name}, sur ${label}, quel prénom a été le plus donné dans la région ${region.name} ?`;
+  showRegionGeoContext(region);
+
+  options.forEach((option) => {
+    const btn = createAnswerButton(
+      displayName(option.name, option.sexTotals),
+      () => {
+        lockAnswers();
+        if (option.name === answer.name) {
+          scoreFor(player.name, 2);
+          btn.classList.add("correct");
+          playGoodSound();
+          setFeedback(
+            `Correct ! +2 pts. Sur ${label}, ${displayName(
+              answer.name,
+              answer.sexTotals
+            )} est devant avec ${formatCount(
+              answer.rangeValue
+            )}. Toutes les propositions : ${optionsStats}.`,
+            "ok"
+          );
+        } else {
+          btn.classList.add("wrong");
+          playBadSound();
+          setFeedback(
+            `Non. Sur ${label}, c'était ${displayName(
+              answer.name,
+              answer.sexTotals
+            )} (${formatCount(
+              answer.rangeValue
+            )}). Toutes les propositions : ${optionsStats}.`,
+            "bad"
+          );
+          answerArea.querySelectorAll("button").forEach((b) => {
+            if (b.textContent.startsWith(`${answer.name} `))
+              b.classList.add("correct");
+          });
+        }
+        renderScores();
+        updateProgress();
+        endChallengeRound();
+      }
+    );
+    answerArea.appendChild(btn);
+  });
+}
+
+function askDepartmentDateChallenge(player) {
+  const dpt = pickRandom(state.data.departments);
+  if (!hasTerritoryYearlyData(dpt)) {
+    return askDepartmentChallenge(player);
+  }
+
+  const { start, end, label } = pickYearOrPeriod();
+  const { answer, options } = buildTerritoryRangeQuestionOptions(
+    dpt,
+    start,
+    end,
+    start === end ? 5 : 20
+  );
+  if (!answer) return askDepartmentChallenge(player);
+  const optionsStats = formatTerritoryRangeStats(options, start, end);
+
+  roundDescription.textContent = `${player.name}, sur ${label}, quel prénom a été le plus donné dans le département ${dpt.name} (${dpt.code}) ?`;
+  void showDepartmentGeoContext(dpt);
+
+  options.forEach((option) => {
+    const btn = createAnswerButton(
+      displayName(option.name, option.sexTotals),
+      () => {
+        lockAnswers();
+        if (option.name === answer.name) {
+          scoreFor(player.name, 2);
+          btn.classList.add("correct");
+          playGoodSound();
+          setFeedback(
+            `Correct ! +2 pts. Sur ${label}, ${displayName(
+              answer.name,
+              answer.sexTotals
+            )} est devant avec ${formatCount(
+              answer.rangeValue
+            )}. Toutes les propositions : ${optionsStats}.`,
+            "ok"
+          );
+        } else {
+          btn.classList.add("wrong");
+          playBadSound();
+          setFeedback(
+            `Non. Sur ${label}, c'était ${displayName(
+              answer.name,
+              answer.sexTotals
+            )} (${formatCount(
+              answer.rangeValue
+            )}). Toutes les propositions : ${optionsStats}.`,
+            "bad"
+          );
+          answerArea.querySelectorAll("button").forEach((b) => {
+            if (b.textContent.startsWith(`${answer.name} `))
+              b.classList.add("correct");
+          });
+        }
+        renderScores();
+        updateProgress();
+        endChallengeRound();
+      }
+    );
+    answerArea.appendChild(btn);
+  });
+}
+
 function askTopNameByYear(player) {
   const year = 1950 + randomInt(2024 - 1950 + 1);
   const best = pickTopNameOfYear(year);
@@ -997,6 +1194,8 @@ function nextRound() {
     () => askYoungAdultOldVote(),
     () => askRegionChallenge(player),
     () => askDepartmentChallenge(player),
+    () => askRegionDateChallenge(player),
+    () => askDepartmentDateChallenge(player),
     () => askTopNameByYear(player),
     () => askTopNameByYear(player),
   ];

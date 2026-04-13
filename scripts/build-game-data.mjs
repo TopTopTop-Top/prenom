@@ -238,10 +238,13 @@ async function parseRegional() {
     const nameBucket = ensureBucket(region.topNames, prenom, () => ({
       total: 0,
       sexTotals: { 1: 0, 2: 0 },
+      yearly: {},
     }));
     nameBucket.total += value;
     nameBucket.sexTotals[String(sexe)] =
       (nameBucket.sexTotals[String(sexe)] || 0) + value;
+    nameBucket.yearly[String(period)] =
+      (nameBucket.yearly[String(period)] || 0) + value;
   }
 
   return byRegion;
@@ -264,11 +267,17 @@ async function parseDepartments() {
 
     const [sexeRaw, prenomRaw, periodeRaw, dptRaw, valeurRaw] = line.split(";");
     const prenom = normalizeName(prenomRaw);
+    const period = Number.parseInt(periodeRaw, 10);
     const value = Number.parseInt(valeurRaw, 10);
     const sexe = Number.parseInt(sexeRaw, 10);
     const dptCode = dptRaw.trim();
 
-    if (!prenom || Number.isNaN(value) || Number.isNaN(sexe)) {
+    if (
+      !prenom ||
+      Number.isNaN(period) ||
+      Number.isNaN(value) ||
+      Number.isNaN(sexe)
+    ) {
       continue;
     }
 
@@ -283,10 +292,13 @@ async function parseDepartments() {
     const nameBucket = ensureBucket(dpt.topNames, prenom, () => ({
       total: 0,
       sexTotals: { 1: 0, 2: 0 },
+      yearly: {},
     }));
     nameBucket.total += value;
     nameBucket.sexTotals[String(sexe)] =
       (nameBucket.sexTotals[String(sexe)] || 0) + value;
+    nameBucket.yearly[String(period)] =
+      (nameBucket.yearly[String(period)] || 0) + value;
   }
 
   return byDepartment;
@@ -300,6 +312,7 @@ function getTopNames(mapOfCounts, count = 15) {
       name,
       value: value.total,
       sexTotals: value.sexTotals,
+      yearly: value.yearly || {},
     }));
 }
 
