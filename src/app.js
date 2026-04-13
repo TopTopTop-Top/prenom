@@ -15,7 +15,7 @@ const state = {
   difficulty: "normal",
   data: null,
   currentChallenge: null,
-  nationalRankByName: {},
+  nationalTotalBirths: 1,
 };
 
 const playersInput = document.getElementById("players");
@@ -208,36 +208,66 @@ function formatNameStats(options) {
     .join(" | ");
 }
 
-function buildNationalRankByName() {
-  const sorted = [...(state.data?.names || [])].sort((a, b) => b.total - a.total);
-  const map = {};
-  sorted.forEach((n, i) => {
-    map[n.prenom] = i + 1;
-  });
-  return map;
+function getNationalTotalBirths() {
+  return state.data?.names?.reduce((sum, n) => sum + (n.total || 0), 0) || 1;
 }
 
 /**
- * Distracteurs locaux: évite autant que possible les top nationaux.
- * La bonne réponse reste le #1 local, mais les autres options sont moins "évidentes".
+ * Score de spécificité locale d'un prénom :
+ * (part du prénom dans le territoire) / (part du prénom en France),
+ * modulé par sqrt(volume local) pour éviter le bruit des petits effectifs.
  */
-function buildTerritoryOptionPool(
-  territory,
-  minLocalValue = 80,
-  avoidTopNationalRank = 120
-) {
-  const localTop = territory.topNames
+function buildTerritorySpecificityRanking(territory, minLocalValue = 80) {
+  const nationalTotal = state.nationalTotalBirths || getNationalTotalBirths();
+  const epsilon = 1e-12;
+  const ranked = territory.topNames
     .filter((x) => (x.value || 0) >= minLocalValue)
+    .map((x) => {
+      const nationalNameTotal = findNameEntry(x.name)?.total || 0;
+      const localShare = territory.total > 0 ? x.value / territory.total : 0;
+      const nationalShare = nationalTotal > 0 ? nationalNameTotal / nationalTotal : 0;
+      const lift = (localShare + epsilon) / (nationalShare + epsilon);
+      const score = Math.log2(lift) * Math.sqrt(x.value);
+      return {
+        ...x,
+        lift,
+        score,
+      };
+    })
+    .filter((x) => Number.isFinite(x.score))
+    .sort((a, b) => b.score - a.score);
+  return ranked;
+}
+
+function buildTerritoryQuestionOptions(territory, minLocalValue = 80) {
+  const ranked = buildTerritorySpecificityRanking(territory, minLocalValue);
+  const answer = ranked[0] || territory.topNames[0];
+  if (!answer) return { answer: null, options: [] };
+
+  const distractorBase = ranked
+    .filter((x) => x.name !== answer.name)
+    .sort((a, b) => Math.abs(a.score - answer.score) - Math.abs(b.score - answer.score));
+
+  const options = [answer];
+  for (const candidate of distractorBase) {
+    if (options.length >= 4) break;
+    if (!options.some((o) => o.name === candidate.name)) {
+      options.push(candidate);
+    }
+  }
+
+  const fallback = territory.topNames
+    .filter((x) => x.name !== answer.name)
     .sort((a, b) => b.value - a.value);
+  for (const candidate of fallback) {
+    if (options.length >= 4) break;
+    if (!options.some((o) => o.name === candidate.name)) {
+      options.push(candidate);
+    }
+  }
 
-  const lessNational = localTop.filter((x) => {
-    const rank = state.nationalRankByName[x.name] || Number.MAX_SAFE_INTEGER;
-    return rank > avoidTopNationalRank;
-  });
-
-  if (lessNational.length >= 6) return lessNational.slice(0, 14);
-  if (localTop.length >= 6) return localTop.slice(0, 14);
-  return territory.topNames.slice(0, 14);
+  options.sort(() => Math.random() - 0.5);
+  return { answer, options };
 }
 
 function pickTopNameOfYear(year) {
@@ -728,19 +758,13 @@ function askYoungAdultOldVote() {
 
 function askRegionChallenge(player) {
   const region = pickRandom(state.data.regions);
-  const answer = region.topNames[0];
-  const pool = buildTerritoryOptionPool(region, 120, 100);
-  const options = [answer];
-  while (options.length < 4) {
-    const candidate = pickRandom(pool);
-    if (candidate?.name && !options.some((opt) => opt.name === candidate.name)) {
-      options.push(candidate);
-    }
+  const { answer, options } = buildTerritoryQuestionOptions(region, 120);
+  if (!answer || options.length < 2) {
+    return askDuelPopularity(player);
   }
-  options.sort(() => Math.random() - 0.5);
   const optionsStats = formatNameStats(options);
 
-  roundDescription.textContent = `${player.name}, quel prénom est le plus donné dans la région ${region.name} ?`;
+  roundDescription.textContent = `${player.name}, quel prénom est le plus caractéristique de la région ${region.name} (plus local que la moyenne France) ?`;
 
   showRegionGeoContext(region);
 
@@ -757,9 +781,9 @@ function askRegionChallenge(player) {
             `Correct ! +2 pts. ${displayName(
               answer.name,
               answer.sexTotals
-            )} : ${formatCount(answer.value)} naissances cumulées (${
+            )} est le plus spécifique localement dans ${
               region.name
-            }). Toutes les propositions : ${optionsStats}.`,
+            } (${formatCount(answer.value)} naissances cumulées). Toutes les propositions : ${optionsStats}.`,
             "ok"
           );
         } else {
@@ -769,7 +793,9 @@ function askRegionChallenge(player) {
             `Non. C'était ${displayName(
               answer.name,
               answer.sexTotals
-            )} (${formatCount(answer.value)}). Tu avais choisi ${displayName(
+            )} (le plus spécifique localement, ${formatCount(
+              answer.value
+            )}). Tu avais choisi ${displayName(
               option.name,
               option.sexTotals
             )} (${formatCount(
@@ -784,19 +810,7 @@ function askRegionChallenge(player) {
         }
         renderScores();
         updateProgress();
-        if (endGameIfWinner()) return;
-        showTimelineChart(
-          {
-            series: timelineSeriesFromPrenoms(
-              options.map((o) => o.name),
-              options.map((o) => displayName(o.name, o.sexTotals))
-            ),
-            caption:
-              "France entière : naissances par an pour les 4 prénoms (après ta réponse)",
-          },
-          { keepGeo: true }
-        );
-        state.currentChallenge = null;
+        endChallengeRound();
       }
     );
     answerArea.appendChild(btn);
@@ -805,19 +819,13 @@ function askRegionChallenge(player) {
 
 function askDepartmentChallenge(player) {
   const dpt = pickRandom(state.data.departments);
-  const answer = dpt.topNames[0];
-  const pool = buildTerritoryOptionPool(dpt, 40, 100);
-  const options = [answer];
-  while (options.length < 4) {
-    const candidate = pickRandom(pool);
-    if (candidate?.name && !options.some((opt) => opt.name === candidate.name)) {
-      options.push(candidate);
-    }
+  const { answer, options } = buildTerritoryQuestionOptions(dpt, 40);
+  if (!answer || options.length < 2) {
+    return askDuelPopularity(player);
   }
-  options.sort(() => Math.random() - 0.5);
   const optionsStats = formatNameStats(options);
 
-  roundDescription.textContent = `${player.name}, quel prénom domine dans le département ${dpt.name} (${dpt.code}) ?`;
+  roundDescription.textContent = `${player.name}, quel prénom est le plus caractéristique du département ${dpt.name} (${dpt.code}) ?`;
 
   void showDepartmentGeoContext(dpt);
 
@@ -834,7 +842,9 @@ function askDepartmentChallenge(player) {
             `Correct ! +2 pts. ${displayName(
               answer.name,
               answer.sexTotals
-            )} : ${formatCount(answer.value)} naissances cumulées (${dpt.name}). Toutes les propositions : ${optionsStats}.`,
+            )} est le plus spécifique localement dans ${dpt.name} (${formatCount(
+              answer.value
+            )} naissances cumulées). Toutes les propositions : ${optionsStats}.`,
             "ok"
           );
         } else {
@@ -844,7 +854,9 @@ function askDepartmentChallenge(player) {
             `Rate. C'était ${displayName(
               answer.name,
               answer.sexTotals
-            )} (${formatCount(answer.value)}). Choix : ${displayName(
+            )} (le plus spécifique localement, ${formatCount(
+              answer.value
+            )}). Choix : ${displayName(
               option.name,
               option.sexTotals
             )} (${formatCount(
@@ -859,19 +871,7 @@ function askDepartmentChallenge(player) {
         }
         renderScores();
         updateProgress();
-        endChallengeRound(() =>
-          showTimelineChart(
-            {
-              series: timelineSeriesFromPrenoms(
-                options.map((o) => o.name),
-                options.map((o) => displayName(o.name, o.sexTotals))
-              ),
-              caption:
-                "France entière : naissances par an pour les 4 prénoms (après ta réponse)",
-            },
-            { keepGeo: true }
-          )
-        );
+        endChallengeRound();
       }
     );
     answerArea.appendChild(btn);
@@ -1025,7 +1025,7 @@ startBtn.onclick = async () => {
 
   try {
     state.data = await loadData();
-    state.nationalRankByName = buildNationalRankByName();
+    state.nationalTotalBirths = getNationalTotalBirths();
   } catch (error) {
     alert(error.message);
     return;
