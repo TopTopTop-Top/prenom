@@ -291,17 +291,30 @@ function pickYearOrPeriod() {
   const isSingleYear = randomInt(2) === 0;
   if (isSingleYear) {
     const year = 1950 + randomInt(2024 - 1950 + 1);
-    return { start: year, end: year, label: `${year}` };
+    return { start: year, end: year };
   }
   const periods = [
     [1900, 1949],
     [1950, 1979],
     [1980, 1999],
+    [1990, 2000],
     [2000, 2014],
     [2015, 2024],
   ];
   const [start, end] = pickRandom(periods);
-  return { start, end, label: `${start}-${end}` };
+  return { start, end };
+}
+
+/** Énoncé : « en 1985 » ou « sur la période de 1990 à 2000 ». */
+function territoryTimeClausePrompt(start, end) {
+  if (start === end) return `en ${start}`;
+  return `sur la période de ${start} à ${end}`;
+}
+
+/** Feedback après point : « En 1985 » / « Sur la période de … ». */
+function territoryTimeClauseFeedback(start, end) {
+  if (start === end) return `En ${start}`;
+  return `Sur la période de ${start} à ${end}`;
 }
 
 function formatTerritoryRangeStats(options, start, end) {
@@ -955,7 +968,9 @@ function askRegionDateChallenge(player) {
     return askRegionChallenge(player);
   }
 
-  const { start, end, label } = pickYearOrPeriod();
+  const { start, end } = pickYearOrPeriod();
+  const timePrompt = territoryTimeClausePrompt(start, end);
+  const timeFb = territoryTimeClauseFeedback(start, end);
   const { answer, options } = buildTerritoryRangeQuestionOptions(
     region,
     start,
@@ -965,7 +980,7 @@ function askRegionDateChallenge(player) {
   if (!answer) return askRegionChallenge(player);
   const optionsStats = formatTerritoryRangeStats(options, start, end);
 
-  roundDescription.textContent = `${player.name}, sur ${label}, quel prénom a été le plus donné dans la région ${region.name} ?`;
+  roundDescription.textContent = `${player.name}, ${timePrompt}, quel prénom a été le plus donné dans la région ${region.name} ?`;
   showRegionGeoContext(region);
 
   options.forEach((option) => {
@@ -978,7 +993,7 @@ function askRegionDateChallenge(player) {
           btn.classList.add("correct");
           playGoodSound();
           setFeedback(
-            `Correct ! +2 pts. Sur ${label}, ${displayName(
+            `Correct ! +2 pts. ${timeFb}, ${displayName(
               answer.name,
               answer.sexTotals
             )} est devant avec ${formatCount(
@@ -990,7 +1005,7 @@ function askRegionDateChallenge(player) {
           btn.classList.add("wrong");
           playBadSound();
           setFeedback(
-            `Non. Sur ${label}, c'était ${displayName(
+            `Non. ${timeFb}, c'était ${displayName(
               answer.name,
               answer.sexTotals
             )} (${formatCount(
@@ -1018,7 +1033,9 @@ function askDepartmentDateChallenge(player) {
     return askDepartmentChallenge(player);
   }
 
-  const { start, end, label } = pickYearOrPeriod();
+  const { start, end } = pickYearOrPeriod();
+  const timePrompt = territoryTimeClausePrompt(start, end);
+  const timeFb = territoryTimeClauseFeedback(start, end);
   const { answer, options } = buildTerritoryRangeQuestionOptions(
     dpt,
     start,
@@ -1028,7 +1045,7 @@ function askDepartmentDateChallenge(player) {
   if (!answer) return askDepartmentChallenge(player);
   const optionsStats = formatTerritoryRangeStats(options, start, end);
 
-  roundDescription.textContent = `${player.name}, sur ${label}, quel prénom a été le plus donné dans le département ${dpt.name} (${dpt.code}) ?`;
+  roundDescription.textContent = `${player.name}, ${timePrompt}, quel prénom a été le plus donné dans le département ${dpt.name} (${dpt.code}) ?`;
   void showDepartmentGeoContext(dpt);
 
   options.forEach((option) => {
@@ -1041,7 +1058,7 @@ function askDepartmentDateChallenge(player) {
           btn.classList.add("correct");
           playGoodSound();
           setFeedback(
-            `Correct ! +2 pts. Sur ${label}, ${displayName(
+            `Correct ! +2 pts. ${timeFb}, ${displayName(
               answer.name,
               answer.sexTotals
             )} est devant avec ${formatCount(
@@ -1053,7 +1070,7 @@ function askDepartmentDateChallenge(player) {
           btn.classList.add("wrong");
           playBadSound();
           setFeedback(
-            `Non. Sur ${label}, c'était ${displayName(
+            `Non. ${timeFb}, c'était ${displayName(
               answer.name,
               answer.sexTotals
             )} (${formatCount(
