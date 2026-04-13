@@ -885,15 +885,23 @@ function askTopNameByYear(player) {
     return askPeakYear(player);
   }
 
-  const candidates = state.data.names
+  const candidatesRaw = state.data.names
     .map((n) => ({
       name: n.prenom,
       value: n.yearly?.[String(year)] || 0,
       sexTotals: n.sexTotals,
     }))
     .filter((x) => x.value > 0)
-    .sort((a, b) => b.value - a.value)
-    .slice(0, 16);
+    .sort((a, b) => b.value - a.value);
+
+  const candidates = [];
+  const seenNames = new Set();
+  for (const c of candidatesRaw) {
+    if (seenNames.has(c.name)) continue;
+    seenNames.add(c.name);
+    candidates.push(c);
+    if (candidates.length >= 16) break;
+  }
 
   const answer = candidates[0];
   const options = [answer];
@@ -904,6 +912,7 @@ function askTopNameByYear(player) {
     }
   }
   options.sort(() => Math.random() - 0.5);
+  const optionsStats = formatNameStats(options);
 
   roundDescription.textContent = `${player.name}, en ${year}, quel prénom a été le plus donné en France ?`;
 
@@ -920,7 +929,9 @@ function askTopNameByYear(player) {
             `Exact ! +2 pts. En ${year}, ${displayName(
               answer.name,
               answer.sexTotals
-            )} est #1 avec ${formatCount(answer.value)} naissances en France.`,
+            )} est #1 avec ${formatCount(
+              answer.value
+            )} naissances en France. Toutes les propositions : ${optionsStats}.`,
             "ok"
           );
         } else {
@@ -930,7 +941,9 @@ function askTopNameByYear(player) {
             `Non. En ${year}, le #1 est ${displayName(
               answer.name,
               answer.sexTotals
-            )} (${formatCount(answer.value)}).`,
+            )} (${formatCount(
+              answer.value
+            )}). Toutes les propositions : ${optionsStats}.`,
             "bad"
           );
           answerArea.querySelectorAll("button").forEach((b) => {
