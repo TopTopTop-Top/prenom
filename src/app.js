@@ -305,8 +305,8 @@ function pickYearOrPeriod() {
   return { start, end };
 }
 
-/** Énoncé : « en 1985 » ou « sur la période de 1990 à 2000 ». */
-function territoryTimeClausePrompt(start, end) {
+/** Phrase de date en fin d’énoncé : « en 1985 » ou « sur la période de 1990 à 2000 ». */
+function territoryDatePhraseAtEnd(start, end) {
   if (start === end) return `en ${start}`;
   return `sur la période de ${start} à ${end}`;
 }
@@ -969,7 +969,7 @@ function askRegionDateChallenge(player) {
   }
 
   const { start, end } = pickYearOrPeriod();
-  const timePrompt = territoryTimeClausePrompt(start, end);
+  const datePhrase = territoryDatePhraseAtEnd(start, end);
   const timeFb = territoryTimeClauseFeedback(start, end);
   const { answer, options } = buildTerritoryRangeQuestionOptions(
     region,
@@ -980,7 +980,7 @@ function askRegionDateChallenge(player) {
   if (!answer) return askRegionChallenge(player);
   const optionsStats = formatTerritoryRangeStats(options, start, end);
 
-  roundDescription.textContent = `${player.name}, ${timePrompt}, quel prénom a été le plus donné dans la région ${region.name} ?`;
+  roundDescription.textContent = `${player.name}, quel prénom domine dans la région ${region.name} ${datePhrase} ?`;
   showRegionGeoContext(region);
 
   options.forEach((option) => {
@@ -1034,7 +1034,7 @@ function askDepartmentDateChallenge(player) {
   }
 
   const { start, end } = pickYearOrPeriod();
-  const timePrompt = territoryTimeClausePrompt(start, end);
+  const datePhrase = territoryDatePhraseAtEnd(start, end);
   const timeFb = territoryTimeClauseFeedback(start, end);
   const { answer, options } = buildTerritoryRangeQuestionOptions(
     dpt,
@@ -1045,7 +1045,7 @@ function askDepartmentDateChallenge(player) {
   if (!answer) return askDepartmentChallenge(player);
   const optionsStats = formatTerritoryRangeStats(options, start, end);
 
-  roundDescription.textContent = `${player.name}, ${timePrompt}, quel prénom a été le plus donné dans le département ${dpt.name} (${dpt.code}) ?`;
+  roundDescription.textContent = `${player.name}, quel prénom domine dans le département ${dpt.name} (${dpt.code}) ${datePhrase} ?`;
   void showDepartmentGeoContext(dpt);
 
   options.forEach((option) => {
