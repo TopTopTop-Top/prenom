@@ -1446,11 +1446,35 @@ function askRankingFourChallenge(player) {
   const buttonsByName = new Map();
 
   function updateLiveFeedback() {
-    if (selectedOrder.length === 0) return;
+    if (selectedOrder.length === 0) {
+      setFeedback(
+        "Clique les 4 propositions dans l'ordre (1 = plus donne), puis valide.",
+        "ok"
+      );
+      return;
+    }
     const text = selectedOrder
       .map((name, idx) => `${idx + 1}. ${labelsByName[name]}`)
       .join(" > ");
     setFeedback(`Ordre en cours: ${text}`, "ok");
+  }
+
+  function refreshSelectionUi() {
+    for (const option of rankingData.options) {
+      const btn = buttonsByName.get(option.name);
+      if (!btn) continue;
+      const baseLabel = labelsByName[option.name];
+      const rank = selectedOrder.indexOf(option.name);
+      if (rank >= 0) {
+        btn.classList.add("selected");
+        btn.textContent = `${rank + 1}. ${baseLabel}`;
+      } else {
+        btn.classList.remove("selected");
+        btn.textContent = baseLabel;
+      }
+    }
+    confirmBtn.disabled = selectedOrder.length !== 4;
+    updateLiveFeedback();
   }
 
   const confirmBtn = document.createElement("button");
@@ -1462,17 +1486,19 @@ function askRankingFourChallenge(player) {
   rankingData.options.forEach((option) => {
     const baseLabel = labelsByName[option.name];
     const btn = createAnswerButton(baseLabel, () => {
-      if (selectedOrder.includes(option.name) || selectedOrder.length >= 4) {
+      const existingIndex = selectedOrder.indexOf(option.name);
+      if (existingIndex >= 0) {
+        playClickSound();
+        selectedOrder.splice(existingIndex, 1);
+        refreshSelectionUi();
+        return;
+      }
+      if (selectedOrder.length >= 4) {
         return;
       }
       playClickSound();
       selectedOrder.push(option.name);
-      btn.classList.add("selected");
-      btn.textContent = `${selectedOrder.length}. ${baseLabel}`;
-      updateLiveFeedback();
-      if (selectedOrder.length === 4) {
-        confirmBtn.disabled = false;
-      }
+      refreshSelectionUi();
     });
     buttonsByName.set(option.name, btn);
     answerArea.appendChild(btn);
