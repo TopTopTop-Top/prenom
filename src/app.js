@@ -16,6 +16,9 @@ const state = {
   data: null,
   currentChallenge: null,
   nationalTotalBirths: 1,
+  comboStreaks: {},
+  questionStats: {},
+  currentQuestionType: null,
 };
 
 const playersInput = document.getElementById("players");
@@ -201,10 +204,15 @@ function formatCount(n) {
   return new Intl.NumberFormat("fr-FR").format(n);
 }
 
-function formatNameStats(options) {
+function formatNameStats(options, scopeLabel = "") {
   return [...options]
     .sort((a, b) => b.value - a.value)
-    .map((o) => `${displayName(o.name, o.sexTotals)}: ${formatCount(o.value)}`)
+    .map(
+      (o) =>
+        `${displayName(o.name, o.sexTotals)}: ${formatCount(o.value)}${
+          scopeLabel ? ` (${scopeLabel})` : ""
+        }`
+    )
     .join(" | ");
 }
 
@@ -358,6 +366,39 @@ function buildTerritoryRangeQuestionOptions(
   return { answer, options };
 }
 
+function buildTerritoryRankingOptions(territory, start, end, minRangeValue) {
+  const candidates = (territory.topNames || [])
+    .map((x) => ({
+      ...x,
+      rangeValue: territoryNameValueForRange(x, start, end),
+    }))
+    .filter((x) => x.rangeValue >= minRangeValue)
+    .sort((a, b) => b.rangeValue - a.rangeValue);
+
+  if (candidates.length < 8) return null;
+  const pool = candidates.slice(0, 14);
+  let selected = [];
+  let safety = 0;
+  while (safety < 40) {
+    safety += 1;
+    selected = [];
+    while (selected.length < 4) {
+      const candidate = pickRandom(pool);
+      if (!selected.some((x) => x.name === candidate.name)) {
+        selected.push(candidate);
+      }
+    }
+    const uniqueValues = new Set(selected.map((x) => x.rangeValue));
+    if (uniqueValues.size === 4) {
+      return {
+        options: selected.sort(() => Math.random() - 0.5),
+        correctOrder: [...selected].sort((a, b) => b.rangeValue - a.rangeValue),
+      };
+    }
+  }
+  return null;
+}
+
 function pickTopNameOfYear(year) {
   let best = null;
   for (const n of state.data.names) {
@@ -390,6 +431,66 @@ function scoreFor(playerName, delta) {
   p.score += delta;
 }
 
+function registerQuestionType(typeKey) {
+  state.currentQuestionType = typeKey;
+  if (!state.questionStats[typeKey]) {
+    state.questionStats[typeKey] = { attempts: 0, correct: 0 };
+  }
+}
+
+function recordQuestionResult(typeKey, isCorrect) {
+  if (!typeKey) return;
+  registerQuestionType(typeKey);
+  state.questionStats[typeKey].attempts += 1;
+  if (isCorrect) state.questionStats[typeKey].correct += 1;
+}
+
+function addPointsWithCombo(playerName, basePoints) {
+  scoreFor(playerName, basePoints);
+  const previousStreak = state.comboStreaks[playerName] || 0;
+  const newStreak = previousStreak + 1;
+  state.comboStreaks[playerName] = newStreak;
+  if (newStreak >= 3) {
+    scoreFor(playerName, 1);
+    return { streak: newStreak, comboBonus: 1 };
+  }
+  return { streak: newStreak, comboBonus: 0 };
+}
+
+function breakCombo(playerName) {
+  state.comboStreaks[playerName] = 0;
+}
+
+function comboText(comboBonus, streak) {
+  if (!comboBonus) return "";
+  return ` Bonus combo +${comboBonus} (série ${streak}).`;
+}
+
+function questionStatsSummaryText() {
+  const labels = {
+    duel_pop: "Duel popularite",
+    peak_year: "Annee de pic",
+    vote_collectif: "Vote collectif",
+    region_total: "Region (cumul)",
+    department_total: "Departement (cumul)",
+    region_period: "Region (periode)",
+    department_period: "Departement (periode)",
+    top_name_year: "Top prenom par annee",
+    ranking_4: "Classement 4 prenoms",
+  };
+  const entries = Object.entries(state.questionStats);
+  if (entries.length === 0) return "Pas de stats detaillees.";
+  return entries
+    .sort(([a], [b]) => (labels[a] || a).localeCompare(labels[b] || b, "fr"))
+    .map(([key, stat]) => {
+      const attempts = stat.attempts || 0;
+      const correct = stat.correct || 0;
+      const pct = attempts > 0 ? Math.round((correct / attempts) * 100) : 0;
+      return `${labels[key] || key}: ${correct}/${attempts} (${pct}%)`;
+    })
+    .join(" | ");
+}
+
 function renderScores() {
   scoreBoard.innerHTML = "";
   const sorted = [...state.players].sort((a, b) => b.score - a.score);
@@ -420,8 +521,9 @@ function endGameIfWinner() {
   const winner = checkWinner();
   if (!winner) return false;
   playGoodSound();
+  const statsSummary = questionStatsSummaryText();
   alert(
-    `${winner.name} gagne la partie avec ${winner.score} points (objectif ${state.targetScore}).`
+    `${winner.name} gagne la partie avec ${winner.score} points (objectif ${state.targetScore}).\nStats par type: ${statsSummary}`
   );
   state.currentChallenge = null;
   clearChallengeUi();
@@ -474,6 +576,7 @@ function endChallengeRound(chartFn, afterRelease) {
 }
 
 function askDuelPopularity(player) {
+  registerQuestionType("duel_pop");
   const [a, b] = pickTwoDistinct(state.data.names);
   const duelDiff = resolveDifficulty();
   const [start, end] = yearWindow(duelDiff);
@@ -501,7 +604,8 @@ function askDuelPopularity(player) {
     const btn = createAnswerButton(opt.label, () => {
       lockAnswers();
       if (opt.value === winner) {
-        scoreFor(player.name, 2);
+        const combo = addPointsWithCombo(player.name, 2);
+        recordQuestionResult("duel_pop", true);
         btn.classList.add("correct");
         playGoodSound();
         setFeedback(
@@ -511,10 +615,15 @@ function askDuelPopularity(player) {
           )} ${formatCount(sumA)} — ${displayName(
             b.prenom,
             b.sexTotals
-          )} ${formatCount(sumB)} (${start}-${end}, France).`,
+          )} ${formatCount(sumB)} (${start}-${end}, France).${comboText(
+            combo.comboBonus,
+            combo.streak
+          )}`,
           "ok"
         );
       } else {
+        breakCombo(player.name);
+        recordQuestionResult("duel_pop", false);
         btn.classList.add("wrong");
         playBadSound();
         setFeedback(
@@ -566,6 +675,7 @@ function askDuelPopularity(player) {
 }
 
 function askPeakYear(player) {
+  registerQuestionType("peak_year");
   const n = pickRandom(state.data.names);
   const roundDiff = resolveDifficulty();
   const choices = pickPeakYearChoices(n.peak.year, roundDiff);
@@ -593,17 +703,22 @@ function askPeakYear(player) {
     const btn = createAnswerButton(String(year), () => {
       lockAnswers();
       if (year === n.peak.year) {
-        scoreFor(player.name, 3);
+        const combo = addPointsWithCombo(player.name, 3);
+        recordQuestionResult("peak_year", true);
         btn.classList.add("correct");
         playGoodSound();
         setFeedback(
           `Exact ! +3 pts. Pic en ${n.peak.year} : ${formatCount(
             n.peak.value
-          )} naissances cette année-là (France). Comparatif des propositions : ${statsText}.`,
+          )} naissances cette année-là (France). Comparatif des propositions : ${statsText}.${comboText(
+            combo.comboBonus,
+            combo.streak
+          )}`,
           "ok"
         );
       } else if (Math.abs(year - n.peak.year) <= 1) {
-        scoreFor(player.name, 1);
+        const combo = addPointsWithCombo(player.name, 1);
+        recordQuestionResult("peak_year", true);
         btn.classList.add("correct");
         playTone({
           frequency: 680,
@@ -614,10 +729,15 @@ function askPeakYear(player) {
         setFeedback(
           `Presque (+1). Pic en ${n.peak.year} : ${formatCount(
             n.peak.value
-          )} naissances. Comparatif des propositions : ${statsText}.`,
+          )} naissances. Comparatif des propositions : ${statsText}.${comboText(
+            combo.comboBonus,
+            combo.streak
+          )}`,
           "ok"
         );
       } else {
+        breakCombo(player.name);
+        recordQuestionResult("peak_year", false);
         btn.classList.add("wrong");
         playBadSound();
         setFeedback(
@@ -664,6 +784,7 @@ function askPeakYear(player) {
 }
 
 function askYoungAdultOldVote() {
+  registerQuestionType("vote_collectif");
   const n = pickRandom(state.data.names);
   roundDescription.textContent = `Vote collectif sur ${displayName(
     n.prenom,
@@ -738,7 +859,13 @@ function askYoungAdultOldVote() {
       const winners = state.players.filter(
         (p) => comboCounts.get(voteKey(votes.get(p.name))) >= 2
       );
-      winners.forEach((p) => scoreFor(p.name, 1));
+      winners.forEach((p) => addPointsWithCombo(p.name, 1));
+      state.players
+        .filter((p) => !winners.some((w) => w.name === p.name))
+        .forEach((p) => breakCombo(p.name));
+      registerQuestionType("vote_collectif");
+      state.questionStats.vote_collectif.attempts += state.players.length;
+      state.questionStats.vote_collectif.correct += winners.length;
 
       const details = state.players
         .map((p) => {
@@ -845,12 +972,16 @@ function askYoungAdultOldVote() {
 }
 
 function askRegionChallenge(player) {
+  registerQuestionType("region_total");
   const region = pickRandom(state.data.regions);
   const { answer, options } = buildTerritoryQuestionOptions(region, 120);
   if (!answer || options.length < 2) {
     return askDuelPopularity(player);
   }
-  const optionsStats = formatNameStats(options);
+  const optionsStats = formatNameStats(
+    options,
+    `${region.name}, cumul 1900-2024`
+  );
 
   roundDescription.textContent = `${player.name}, quel prénom est le plus donné dans la région ${region.name} ?`;
 
@@ -862,7 +993,8 @@ function askRegionChallenge(player) {
       () => {
         lockAnswers();
         if (option.name === answer.name) {
-          scoreFor(player.name, 2);
+          const combo = addPointsWithCombo(player.name, 2);
+          recordQuestionResult("region_total", true);
           btn.classList.add("correct");
           playGoodSound();
           setFeedback(
@@ -871,10 +1003,15 @@ function askRegionChallenge(player) {
               answer.sexTotals
             )} : ${formatCount(answer.value)} naissances cumulées (${
               region.name
-            }). Toutes les propositions : ${optionsStats}.`,
+            }). Toutes les propositions : ${optionsStats}.${comboText(
+              combo.comboBonus,
+              combo.streak
+            )}`,
             "ok"
           );
         } else {
+          breakCombo(player.name);
+          recordQuestionResult("region_total", false);
           btn.classList.add("wrong");
           playBadSound();
           setFeedback(
@@ -904,12 +1041,13 @@ function askRegionChallenge(player) {
 }
 
 function askDepartmentChallenge(player) {
+  registerQuestionType("department_total");
   const dpt = pickRandom(state.data.departments);
   const { answer, options } = buildTerritoryQuestionOptions(dpt, 40);
   if (!answer || options.length < 2) {
     return askDuelPopularity(player);
   }
-  const optionsStats = formatNameStats(options);
+  const optionsStats = formatNameStats(options, `${dpt.name}, cumul 1900-2024`);
 
   roundDescription.textContent = `${player.name}, quel prénom domine dans le département ${dpt.name} (${dpt.code}) ?`;
 
@@ -921,7 +1059,8 @@ function askDepartmentChallenge(player) {
       () => {
         lockAnswers();
         if (option.name === answer.name) {
-          scoreFor(player.name, 2);
+          const combo = addPointsWithCombo(player.name, 2);
+          recordQuestionResult("department_total", true);
           btn.classList.add("correct");
           playGoodSound();
           setFeedback(
@@ -930,10 +1069,15 @@ function askDepartmentChallenge(player) {
               answer.sexTotals
             )} : ${formatCount(answer.value)} naissances cumulées (${
               dpt.name
-            }). Toutes les propositions : ${optionsStats}.`,
+            }). Toutes les propositions : ${optionsStats}.${comboText(
+              combo.comboBonus,
+              combo.streak
+            )}`,
             "ok"
           );
         } else {
+          breakCombo(player.name);
+          recordQuestionResult("department_total", false);
           btn.classList.add("wrong");
           playBadSound();
           setFeedback(
@@ -963,6 +1107,7 @@ function askDepartmentChallenge(player) {
 }
 
 function askRegionDateChallenge(player) {
+  registerQuestionType("region_period");
   const region = pickRandom(state.data.regions);
   if (!hasTerritoryYearlyData(region)) {
     return askRegionChallenge(player);
@@ -989,7 +1134,8 @@ function askRegionDateChallenge(player) {
       () => {
         lockAnswers();
         if (option.name === answer.name) {
-          scoreFor(player.name, 2);
+          const combo = addPointsWithCombo(player.name, 2);
+          recordQuestionResult("region_period", true);
           btn.classList.add("correct");
           playGoodSound();
           setFeedback(
@@ -998,10 +1144,15 @@ function askRegionDateChallenge(player) {
               answer.sexTotals
             )} est devant avec ${formatCount(
               answer.rangeValue
-            )}. Toutes les propositions : ${optionsStats}.`,
+            )}. Toutes les propositions : ${optionsStats}.${comboText(
+              combo.comboBonus,
+              combo.streak
+            )}`,
             "ok"
           );
         } else {
+          breakCombo(player.name);
+          recordQuestionResult("region_period", false);
           btn.classList.add("wrong");
           playBadSound();
           setFeedback(
@@ -1028,6 +1179,7 @@ function askRegionDateChallenge(player) {
 }
 
 function askDepartmentDateChallenge(player) {
+  registerQuestionType("department_period");
   const dpt = pickRandom(state.data.departments);
   if (!hasTerritoryYearlyData(dpt)) {
     return askDepartmentChallenge(player);
@@ -1054,7 +1206,8 @@ function askDepartmentDateChallenge(player) {
       () => {
         lockAnswers();
         if (option.name === answer.name) {
-          scoreFor(player.name, 2);
+          const combo = addPointsWithCombo(player.name, 2);
+          recordQuestionResult("department_period", true);
           btn.classList.add("correct");
           playGoodSound();
           setFeedback(
@@ -1063,10 +1216,15 @@ function askDepartmentDateChallenge(player) {
               answer.sexTotals
             )} est devant avec ${formatCount(
               answer.rangeValue
-            )}. Toutes les propositions : ${optionsStats}.`,
+            )}. Toutes les propositions : ${optionsStats}.${comboText(
+              combo.comboBonus,
+              combo.streak
+            )}`,
             "ok"
           );
         } else {
+          breakCombo(player.name);
+          recordQuestionResult("department_period", false);
           btn.classList.add("wrong");
           playBadSound();
           setFeedback(
@@ -1093,6 +1251,7 @@ function askDepartmentDateChallenge(player) {
 }
 
 function askTopNameByYear(player) {
+  registerQuestionType("top_name_year");
   const year = 1950 + randomInt(2024 - 1950 + 1);
   const best = pickTopNameOfYear(year);
   if (!best || best.value <= 0) {
@@ -1126,7 +1285,7 @@ function askTopNameByYear(player) {
     }
   }
   options.sort(() => Math.random() - 0.5);
-  const optionsStats = formatNameStats(options);
+  const optionsStats = formatNameStats(options, `France, annee ${year}`);
 
   roundDescription.textContent = `${player.name}, en ${year}, quel prénom a été le plus donné en France ?`;
 
@@ -1136,7 +1295,8 @@ function askTopNameByYear(player) {
       () => {
         lockAnswers();
         if (option.name === answer.name) {
-          scoreFor(player.name, 2);
+          const combo = addPointsWithCombo(player.name, 2);
+          recordQuestionResult("top_name_year", true);
           btn.classList.add("correct");
           playGoodSound();
           setFeedback(
@@ -1145,10 +1305,15 @@ function askTopNameByYear(player) {
               answer.sexTotals
             )} est #1 avec ${formatCount(
               answer.value
-            )} naissances en France. Toutes les propositions : ${optionsStats}.`,
+            )} naissances en France. Toutes les propositions : ${optionsStats}.${comboText(
+              combo.comboBonus,
+              combo.streak
+            )}`,
             "ok"
           );
         } else {
+          breakCombo(player.name);
+          recordQuestionResult("top_name_year", false);
           btn.classList.add("wrong");
           playBadSound();
           setFeedback(
@@ -1187,6 +1352,178 @@ function askTopNameByYear(player) {
   });
 }
 
+function askRankingFourChallenge(player) {
+  registerQuestionType("ranking_4");
+  const useDepartment = randomInt(2) === 0;
+  const territory = useDepartment
+    ? pickRandom(state.data.departments)
+    : pickRandom(state.data.regions);
+  if (!hasTerritoryYearlyData(territory)) {
+    return useDepartment
+      ? askDepartmentChallenge(player)
+      : askRegionChallenge(player);
+  }
+
+  const { start, end } = pickYearOrPeriod();
+  const rankingData = buildTerritoryRankingOptions(
+    territory,
+    start,
+    end,
+    useDepartment ? 5 : 12
+  );
+  if (!rankingData) {
+    return useDepartment
+      ? askDepartmentDateChallenge(player)
+      : askRegionDateChallenge(player);
+  }
+
+  const contextLabel = useDepartment
+    ? `departement ${territory.name} (${territory.code})`
+    : `region ${territory.name}`;
+  const periodLabel = start === end ? `en ${start}` : `sur ${start}-${end}`;
+  roundDescription.textContent = `${player.name}, classe ces 4 prénoms du plus donné au moins donné dans ${contextLabel} ${periodLabel}.`;
+  setFeedback(
+    "Clique les 4 propositions dans l'ordre (1 = plus donne), puis valide.",
+    "ok"
+  );
+  if (useDepartment) {
+    void showDepartmentGeoContext(territory);
+  } else {
+    showRegionGeoContext(territory);
+  }
+
+  const labelsByName = Object.fromEntries(
+    rankingData.options.map((o) => [o.name, displayName(o.name, o.sexTotals)])
+  );
+  const selectedOrder = [];
+  const buttonsByName = new Map();
+
+  function updateLiveFeedback() {
+    if (selectedOrder.length === 0) return;
+    const text = selectedOrder
+      .map((name, idx) => `${idx + 1}. ${labelsByName[name]}`)
+      .join(" > ");
+    setFeedback(`Ordre en cours: ${text}`, "ok");
+  }
+
+  const confirmBtn = document.createElement("button");
+  confirmBtn.type = "button";
+  confirmBtn.className = "answer-btn vote-confirm";
+  confirmBtn.textContent = "Valider le classement";
+  confirmBtn.disabled = true;
+
+  rankingData.options.forEach((option) => {
+    const baseLabel = labelsByName[option.name];
+    const btn = createAnswerButton(baseLabel, () => {
+      if (selectedOrder.includes(option.name) || selectedOrder.length >= 4) {
+        return;
+      }
+      playClickSound();
+      selectedOrder.push(option.name);
+      btn.classList.add("selected");
+      btn.textContent = `${selectedOrder.length}. ${baseLabel}`;
+      updateLiveFeedback();
+      if (selectedOrder.length === 4) {
+        confirmBtn.disabled = false;
+      }
+    });
+    buttonsByName.set(option.name, btn);
+    answerArea.appendChild(btn);
+  });
+
+  confirmBtn.onclick = () => {
+    if (selectedOrder.length !== 4) return;
+    lockAnswers();
+
+    const expected = rankingData.correctOrder.map((x) => x.name);
+    const exactPositions = expected.filter(
+      (name, idx) => selectedOrder[idx] === name
+    ).length;
+    const isPerfect = exactPositions === 4;
+    const selectedText = selectedOrder
+      .map((name, idx) => `${idx + 1}. ${labelsByName[name]}`)
+      .join(" > ");
+    const expectedText = rankingData.correctOrder
+      .map(
+        (x, idx) =>
+          `${idx + 1}. ${displayName(x.name, x.sexTotals)} (${formatCount(
+            x.rangeValue
+          )})`
+      )
+      .join(" > ");
+
+    if (isPerfect) {
+      const combo = addPointsWithCombo(player.name, 3);
+      recordQuestionResult("ranking_4", true);
+      playGoodSound();
+      setFeedback(
+        `Parfait ! +3 pts. Classement exact (${periodLabel}, ${contextLabel}). ${expectedText}.${comboText(
+          combo.comboBonus,
+          combo.streak
+        )}`,
+        "ok"
+      );
+    } else if (exactPositions >= 2) {
+      const combo = addPointsWithCombo(player.name, 1);
+      recordQuestionResult("ranking_4", true);
+      playTone({
+        frequency: 680,
+        duration: 0.08,
+        type: "triangle",
+        volume: 0.02,
+      });
+      setFeedback(
+        `Bien tente (+1). ${exactPositions}/4 positions exactes. Ton ordre: ${selectedText}. Bon ordre: ${expectedText}.${comboText(
+          combo.comboBonus,
+          combo.streak
+        )}`,
+        "ok"
+      );
+    } else {
+      breakCombo(player.name);
+      recordQuestionResult("ranking_4", false);
+      playBadSound();
+      setFeedback(
+        `Rate. ${exactPositions}/4 positions exactes. Ton ordre: ${selectedText}. Bon ordre: ${expectedText}.`,
+        "bad"
+      );
+    }
+
+    for (const [name, btn] of buttonsByName.entries()) {
+      const rank = expected.indexOf(name);
+      if (rank === -1) continue;
+      btn.textContent = `${rank + 1}. ${labelsByName[name]}`;
+      if (selectedOrder[rank] === name) {
+        btn.classList.add("correct");
+      } else {
+        btn.classList.add("wrong");
+      }
+    }
+
+    renderScores();
+    updateProgress();
+    endChallengeRound(() =>
+      showTimelineChart({
+        series: rankingData.correctOrder.map((x, i) => ({
+          label: `${i + 1}. ${displayName(x.name, x.sexTotals)}`,
+          color: ["#7f8cff", "#39d8ff", "#20d18f", "#ffe27b"][i % 4],
+          yearly: findNameEntry(x.name)?.yearly || {},
+        })),
+        highlights: [
+          {
+            from: start,
+            to: end,
+            fill: "rgba(255, 226, 123, 0.22)",
+            label: start === end ? `Année ${start}` : `Période ${start}-${end}`,
+          },
+        ],
+        caption: `Comparatif des 4 prénoms (${contextLabel}) — classement sur ${start}-${end}`,
+      })
+    );
+  };
+  answerArea.appendChild(confirmBtn);
+}
+
 function nextRound() {
   if (state.currentChallenge) {
     setFeedback(
@@ -1209,6 +1546,7 @@ function nextRound() {
     () => askDuelPopularity(player),
     () => askPeakYear(player),
     () => askYoungAdultOldVote(),
+    () => askRankingFourChallenge(player),
     () => askRegionChallenge(player),
     () => askDepartmentChallenge(player),
     () => askRegionDateChallenge(player),
@@ -1251,6 +1589,9 @@ startBtn.onclick = async () => {
   state.targetScore = Number.parseInt(targetScoreInput.value, 10) || 15;
   state.difficulty = difficultyInput?.value || "normal";
   state.players = names.map((name) => ({ name, score: 0 }));
+  state.comboStreaks = Object.fromEntries(names.map((name) => [name, 0]));
+  state.questionStats = {};
+  state.currentQuestionType = null;
   state.currentPlayerIndex = 0;
   state.currentRound = 0;
   nextRoundBtn.disabled = false;
