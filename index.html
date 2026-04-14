@@ -41,6 +41,73 @@
             <option value="mixed">Mixte — varie à chaque manche</option>
           </select>
         </div>
+        <div class="row">
+          <p class="settings-label">
+            Types de questions (coche ce que tu veux jouer)
+          </p>
+          <div id="questionTypePicker" class="question-type-picker">
+            <label class="qtype-option"
+              ><input type="checkbox" data-question-type="duel_pop" checked />
+              Duel de popularité</label
+            >
+            <label class="qtype-option"
+              ><input type="checkbox" data-question-type="peak_year" checked />
+              Année du pic</label
+            >
+            <label class="qtype-option"
+              ><input
+                type="checkbox"
+                data-question-type="vote_collectif"
+                checked
+              />
+              Vote collectif</label
+            >
+            <label class="qtype-option"
+              ><input type="checkbox" data-question-type="ranking_4" checked />
+              Classement de 4 prénoms</label
+            >
+            <label class="qtype-option"
+              ><input
+                type="checkbox"
+                data-question-type="region_total"
+                checked
+              />
+              Région (cumul)</label
+            >
+            <label class="qtype-option"
+              ><input
+                type="checkbox"
+                data-question-type="department_total"
+                checked
+              />
+              Département (cumul)</label
+            >
+            <label class="qtype-option"
+              ><input
+                type="checkbox"
+                data-question-type="region_period"
+                checked
+              />
+              Région (période/année)</label
+            >
+            <label class="qtype-option"
+              ><input
+                type="checkbox"
+                data-question-type="department_period"
+                checked
+              />
+              Département (période/année)</label
+            >
+            <label class="qtype-option"
+              ><input
+                type="checkbox"
+                data-question-type="top_name_year"
+                checked
+              />
+              Top prénom d'une année (France)</label
+            >
+          </div>
+        </div>
         <button id="startBtn" class="btn-primary">Lancer la partie</button>
       </section>
 
@@ -53,16 +120,33 @@
           <div id="progressBar" class="progress-bar"></div>
         </div>
         <p id="roundDescription" class="round-prompt"></p>
-        <div id="contextVisual" class="context-visual hidden" aria-live="polite">
+        <div
+          id="contextVisual"
+          class="context-visual hidden"
+          aria-live="polite"
+        >
           <div id="geoBlock" class="context-block geo-block hidden">
             <p class="context-heading">Où c’est sur la carte ?</p>
             <p id="geoHint" class="geo-hint"></p>
-            <div id="leafletMap" class="leaflet-map" role="img" aria-label="Carte"></div>
+            <div
+              id="leafletMap"
+              class="leaflet-map"
+              role="img"
+              aria-label="Carte"
+            ></div>
             <div class="geo-links">
-              <a id="geoLinkOsm" class="geo-link" target="_blank" rel="noopener noreferrer"
+              <a
+                id="geoLinkOsm"
+                class="geo-link"
+                target="_blank"
+                rel="noopener noreferrer"
                 >Ouvrir dans OpenStreetMap</a
               >
-              <a id="geoLinkGmaps" class="geo-link" target="_blank" rel="noopener noreferrer"
+              <a
+                id="geoLinkGmaps"
+                class="geo-link"
+                target="_blank"
+                rel="noopener noreferrer"
                 >Ouvrir dans Google&nbsp;Maps</a
               >
             </div>
@@ -90,6 +174,6 @@
       integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
       crossorigin=""
     ></script>
-    <script type="module" src="./src/app.js?v=20260414-1"></script>
+    <script type="module" src="./src/app.js?v=20260414-2"></script>
   </body>
 </html>

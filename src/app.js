@@ -19,6 +19,7 @@ const state = {
   comboStreaks: {},
   questionStats: {},
   currentQuestionType: null,
+  enabledQuestionTypes: [],
 };
 
 const playersInput = document.getElementById("players");
@@ -34,6 +35,19 @@ const feedback = document.getElementById("feedback");
 const scoreBoard = document.getElementById("scoreBoard");
 const progressBar = document.getElementById("progressBar");
 const turnPill = document.getElementById("turnPill");
+const questionTypePicker = document.getElementById("questionTypePicker");
+
+const QUESTION_TYPE_WEIGHTS = {
+  duel_pop: 1,
+  peak_year: 1,
+  vote_collectif: 1,
+  ranking_4: 1,
+  region_total: 1,
+  department_total: 1,
+  region_period: 2,
+  department_period: 2,
+  top_name_year: 2,
+};
 
 let audioContext = null;
 
@@ -581,6 +595,50 @@ function endChallengeRound(chartFn, afterRelease) {
   } finally {
     state.currentChallenge = null;
     if (afterRelease) afterRelease();
+  }
+}
+
+function selectedQuestionTypesFromUi() {
+  const checked = questionTypePicker?.querySelectorAll(
+    "input[data-question-type]:checked"
+  );
+  if (!checked) return [];
+  return [...checked].map((x) => x.getAttribute("data-question-type"));
+}
+
+function weightedQuestionTypePool(types) {
+  const pool = [];
+  for (const type of types) {
+    const weight = Math.max(1, QUESTION_TYPE_WEIGHTS[type] || 1);
+    for (let i = 0; i < weight; i += 1) {
+      pool.push(type);
+    }
+  }
+  return pool;
+}
+
+function challengeFnByType(type, player) {
+  switch (type) {
+    case "duel_pop":
+      return () => askDuelPopularity(player);
+    case "peak_year":
+      return () => askPeakYear(player);
+    case "vote_collectif":
+      return () => askYoungAdultOldVote();
+    case "ranking_4":
+      return () => askRankingFourChallenge(player);
+    case "region_total":
+      return () => askRegionChallenge(player);
+    case "department_total":
+      return () => askDepartmentChallenge(player);
+    case "region_period":
+      return () => askRegionDateChallenge(player);
+    case "department_period":
+      return () => askDepartmentDateChallenge(player);
+    case "top_name_year":
+      return () => askTopNameByYear(player);
+    default:
+      return null;
   }
 }
 
@@ -1615,22 +1673,18 @@ function nextRound() {
   turnPill.textContent = `Objectif ${state.targetScore} pts`;
   playClickSound();
 
-  const challengeFns = [
-    () => askDuelPopularity(player),
-    () => askPeakYear(player),
-    () => askYoungAdultOldVote(),
-    () => askRankingFourChallenge(player),
-    () => askRegionChallenge(player),
-    () => askDepartmentChallenge(player),
-    () => askRegionDateChallenge(player),
-    () => askRegionDateChallenge(player),
-    () => askDepartmentDateChallenge(player),
-    () => askDepartmentDateChallenge(player),
-    () => askTopNameByYear(player),
-    () => askTopNameByYear(player),
-  ];
-
-  state.currentChallenge = pickRandom(challengeFns);
+  const enabledTypes =
+    state.enabledQuestionTypes.length > 0
+      ? state.enabledQuestionTypes
+      : Object.keys(QUESTION_TYPE_WEIGHTS);
+  const weightedPool = weightedQuestionTypePool(enabledTypes);
+  const chosenType = pickRandom(weightedPool);
+  const chosenChallenge = challengeFnByType(chosenType, player);
+  if (!chosenChallenge) {
+    setFeedback("Type de question invalide. Vérifie la sélection.", "bad");
+    return;
+  }
+  state.currentChallenge = chosenChallenge;
   state.currentChallenge();
 
   state.currentPlayerIndex =
@@ -1661,6 +1715,11 @@ startBtn.onclick = async () => {
 
   state.targetScore = Number.parseInt(targetScoreInput.value, 10) || 15;
   state.difficulty = difficultyInput?.value || "normal";
+  state.enabledQuestionTypes = selectedQuestionTypesFromUi();
+  if (state.enabledQuestionTypes.length === 0) {
+    alert("Choisis au moins un type de question.");
+    return;
+  }
   state.players = names.map((name) => ({ name, score: 0 }));
   state.comboStreaks = Object.fromEntries(names.map((name) => [name, 0]));
   state.questionStats = {};

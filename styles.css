@@ -309,6 +309,36 @@ label {
   font-size: 14px;
 }
 
+.settings-label {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.question-type-picker {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 10px;
+}
+
+.qtype-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.qtype-option input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+
 .context-visual {
   margin: 10px 0 14px;
   display: flex;
@@ -437,6 +467,10 @@ label {
   }
 
   .answer-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .question-type-picker {
     grid-template-columns: 1fr;
   }
 
