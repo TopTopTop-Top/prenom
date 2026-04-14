@@ -982,6 +982,8 @@ function askRegionChallenge(player) {
     options,
     `${region.name}, cumul 1900-2024`
   );
+  const optionNames = options.map((o) => o.name);
+  const optionLabels = options.map((o) => displayName(o.name, o.sexTotals));
 
   roundDescription.textContent = `${player.name}, quel prénom est le plus donné dans la région ${region.name} ?`;
 
@@ -1033,7 +1035,12 @@ function askRegionChallenge(player) {
         }
         renderScores();
         updateProgress();
-        endChallengeRound();
+        endChallengeRound(() =>
+          showTimelineChart({
+            series: timelineSeriesFromPrenoms(optionNames, optionLabels),
+            caption: `Évolution nationale des prénoms proposés (${region.name}, cumul 1900-2024)`,
+          })
+        );
       }
     );
     answerArea.appendChild(btn);
@@ -1048,6 +1055,8 @@ function askDepartmentChallenge(player) {
     return askDuelPopularity(player);
   }
   const optionsStats = formatNameStats(options, `${dpt.name}, cumul 1900-2024`);
+  const optionNames = options.map((o) => o.name);
+  const optionLabels = options.map((o) => displayName(o.name, o.sexTotals));
 
   roundDescription.textContent = `${player.name}, quel prénom domine dans le département ${dpt.name} (${dpt.code}) ?`;
 
@@ -1099,7 +1108,12 @@ function askDepartmentChallenge(player) {
         }
         renderScores();
         updateProgress();
-        endChallengeRound();
+        endChallengeRound(() =>
+          showTimelineChart({
+            series: timelineSeriesFromPrenoms(optionNames, optionLabels),
+            caption: `Évolution nationale des prénoms proposés (${dpt.name}, cumul 1900-2024)`,
+          })
+        );
       }
     );
     answerArea.appendChild(btn);
@@ -1124,6 +1138,8 @@ function askRegionDateChallenge(player) {
   );
   if (!answer) return askRegionChallenge(player);
   const optionsStats = formatTerritoryRangeStats(options, start, end);
+  const optionNames = options.map((o) => o.name);
+  const optionLabels = options.map((o) => displayName(o.name, o.sexTotals));
 
   roundDescription.textContent = `${player.name}, quel prénom domine dans la région ${region.name} ${datePhrase} ?`;
   showRegionGeoContext(region);
@@ -1171,7 +1187,21 @@ function askRegionDateChallenge(player) {
         }
         renderScores();
         updateProgress();
-        endChallengeRound();
+        endChallengeRound(() =>
+          showTimelineChart({
+            series: timelineSeriesFromPrenoms(optionNames, optionLabels),
+            highlights: [
+              {
+                from: start,
+                to: end,
+                fill: "rgba(255, 226, 123, 0.22)",
+                label:
+                  start === end ? `Année ${start}` : `Période ${start}-${end}`,
+              },
+            ],
+            caption: `Évolution nationale des prénoms proposés (${region.name}) — focus ${start}-${end}`,
+          })
+        );
       }
     );
     answerArea.appendChild(btn);
@@ -1196,6 +1226,8 @@ function askDepartmentDateChallenge(player) {
   );
   if (!answer) return askDepartmentChallenge(player);
   const optionsStats = formatTerritoryRangeStats(options, start, end);
+  const optionNames = options.map((o) => o.name);
+  const optionLabels = options.map((o) => displayName(o.name, o.sexTotals));
 
   roundDescription.textContent = `${player.name}, quel prénom domine dans le département ${dpt.name} (${dpt.code}) ${datePhrase} ?`;
   void showDepartmentGeoContext(dpt);
@@ -1243,7 +1275,21 @@ function askDepartmentDateChallenge(player) {
         }
         renderScores();
         updateProgress();
-        endChallengeRound();
+        endChallengeRound(() =>
+          showTimelineChart({
+            series: timelineSeriesFromPrenoms(optionNames, optionLabels),
+            highlights: [
+              {
+                from: start,
+                to: end,
+                fill: "rgba(255, 226, 123, 0.22)",
+                label:
+                  start === end ? `Année ${start}` : `Période ${start}-${end}`,
+              },
+            ],
+            caption: `Évolution nationale des prénoms proposés (${dpt.name}) — focus ${start}-${end}`,
+          })
+        );
       }
     );
     answerArea.appendChild(btn);
@@ -1286,6 +1332,8 @@ function askTopNameByYear(player) {
   }
   options.sort(() => Math.random() - 0.5);
   const optionsStats = formatNameStats(options, `France, annee ${year}`);
+  const optionNames = options.map((o) => o.name);
+  const optionLabels = options.map((o) => displayName(o.name, o.sexTotals));
 
   roundDescription.textContent = `${player.name}, en ${year}, quel prénom a été le plus donné en France ?`;
 
@@ -1335,15 +1383,9 @@ function askTopNameByYear(player) {
         updateProgress();
         endChallengeRound(() =>
           showTimelineChart({
-            series: [
-              {
-                label: displayName(answer.name, answer.sexTotals),
-                color: "#7f8cff",
-                yearly: findNameEntry(answer.name)?.yearly || {},
-              },
-            ],
+            series: timelineSeriesFromPrenoms(optionNames, optionLabels),
             markYears: [{ year, color: "rgba(255, 226, 123, 0.9)", width: 2 }],
-            caption: `Prénom #1 en ${year} : évolution nationale du prénom gagnant`,
+            caption: `Prénoms proposés en ${year} : comparaison des courbes nationales`,
           })
         );
       }
