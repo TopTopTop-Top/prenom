@@ -426,6 +426,15 @@ function timelineSeriesFromPrenoms(prenoms, labels) {
   });
 }
 
+function timelineSeriesFromTerritoryOptions(options, labels) {
+  const colors = ["#7f8cff", "#39d8ff", "#20d18f", "#ffe27b"];
+  return options.map((option, i) => ({
+    label: labels[i] || option.name,
+    color: colors[i % colors.length],
+    yearly: option.yearly || {},
+  }));
+}
+
 function scoreFor(playerName, delta) {
   const p = state.players.find((x) => x.name === playerName);
   p.score += delta;
@@ -982,7 +991,6 @@ function askRegionChallenge(player) {
     options,
     `${region.name}, cumul 1900-2024`
   );
-  const optionNames = options.map((o) => o.name);
   const optionLabels = options.map((o) => displayName(o.name, o.sexTotals));
 
   roundDescription.textContent = `${player.name}, quel prénom est le plus donné dans la région ${region.name} ?`;
@@ -1037,8 +1045,8 @@ function askRegionChallenge(player) {
         updateProgress();
         endChallengeRound(() =>
           showTimelineChart({
-            series: timelineSeriesFromPrenoms(optionNames, optionLabels),
-            caption: `Évolution nationale des prénoms proposés (${region.name}, cumul 1900-2024)`,
+            series: timelineSeriesFromTerritoryOptions(options, optionLabels),
+            caption: `Évolution des prénoms proposés dans la région ${region.name}`,
           })
         );
       }
@@ -1055,7 +1063,6 @@ function askDepartmentChallenge(player) {
     return askDuelPopularity(player);
   }
   const optionsStats = formatNameStats(options, `${dpt.name}, cumul 1900-2024`);
-  const optionNames = options.map((o) => o.name);
   const optionLabels = options.map((o) => displayName(o.name, o.sexTotals));
 
   roundDescription.textContent = `${player.name}, quel prénom domine dans le département ${dpt.name} (${dpt.code}) ?`;
@@ -1110,8 +1117,8 @@ function askDepartmentChallenge(player) {
         updateProgress();
         endChallengeRound(() =>
           showTimelineChart({
-            series: timelineSeriesFromPrenoms(optionNames, optionLabels),
-            caption: `Évolution nationale des prénoms proposés (${dpt.name}, cumul 1900-2024)`,
+            series: timelineSeriesFromTerritoryOptions(options, optionLabels),
+            caption: `Évolution des prénoms proposés dans le département ${dpt.name} (${dpt.code})`,
           })
         );
       }
@@ -1138,7 +1145,6 @@ function askRegionDateChallenge(player) {
   );
   if (!answer) return askRegionChallenge(player);
   const optionsStats = formatTerritoryRangeStats(options, start, end);
-  const optionNames = options.map((o) => o.name);
   const optionLabels = options.map((o) => displayName(o.name, o.sexTotals));
 
   roundDescription.textContent = `${player.name}, quel prénom domine dans la région ${region.name} ${datePhrase} ?`;
@@ -1189,7 +1195,7 @@ function askRegionDateChallenge(player) {
         updateProgress();
         endChallengeRound(() =>
           showTimelineChart({
-            series: timelineSeriesFromPrenoms(optionNames, optionLabels),
+            series: timelineSeriesFromTerritoryOptions(options, optionLabels),
             highlights: [
               {
                 from: start,
@@ -1199,7 +1205,7 @@ function askRegionDateChallenge(player) {
                   start === end ? `Année ${start}` : `Période ${start}-${end}`,
               },
             ],
-            caption: `Évolution nationale des prénoms proposés (${region.name}) — focus ${start}-${end}`,
+            caption: `Évolution des prénoms proposés dans la région ${region.name} — focus ${start}-${end}`,
           })
         );
       }
@@ -1226,7 +1232,6 @@ function askDepartmentDateChallenge(player) {
   );
   if (!answer) return askDepartmentChallenge(player);
   const optionsStats = formatTerritoryRangeStats(options, start, end);
-  const optionNames = options.map((o) => o.name);
   const optionLabels = options.map((o) => displayName(o.name, o.sexTotals));
 
   roundDescription.textContent = `${player.name}, quel prénom domine dans le département ${dpt.name} (${dpt.code}) ${datePhrase} ?`;
@@ -1277,7 +1282,7 @@ function askDepartmentDateChallenge(player) {
         updateProgress();
         endChallengeRound(() =>
           showTimelineChart({
-            series: timelineSeriesFromPrenoms(optionNames, optionLabels),
+            series: timelineSeriesFromTerritoryOptions(options, optionLabels),
             highlights: [
               {
                 from: start,
@@ -1287,7 +1292,7 @@ function askDepartmentDateChallenge(player) {
                   start === end ? `Année ${start}` : `Période ${start}-${end}`,
               },
             ],
-            caption: `Évolution nationale des prénoms proposés (${dpt.name}) — focus ${start}-${end}`,
+            caption: `Évolution des prénoms proposés dans le département ${dpt.name} (${dpt.code}) — focus ${start}-${end}`,
           })
         );
       }
